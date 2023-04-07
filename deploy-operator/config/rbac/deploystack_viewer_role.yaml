@@ -1,0 +1,27 @@
+# permissions for end users to view deploystacks.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: deploystack-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: deploy-operator
+    app.kubernetes.io/part-of: deploy-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: deploystack-viewer-role
+rules:
+- apiGroups:
+  - gopron.online
+  resources:
+  - deploystacks
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - gopron.online
+  resources:
+  - deploystacks/status
+  verbs:
+  - get

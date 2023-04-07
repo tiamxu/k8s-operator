@@ -1,0 +1,16 @@
+domain: gopron.online
+layout:
+- go.kubebuilder.io/v3
+projectName: 02-kubebuilder
+repo: github.com/tiamxu/k8s-operator/02-kubebuilder
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: gopron.online
+  group: apps
+  kind: MyKind
+  path: github.com/tiamxu/k8s-operator/02-kubebuilder/api/v1
+  version: v1
+version: "3"

@@ -1,0 +1,83 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mykind-manager
+  namespace: default
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: mykind-operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/name: mykind-operator
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: mykind-operator
+      labels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/name: mykind-operator
+    spec:   
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+      - command:
+        - /manager
+        args:
+        - --leader-elect
+        image: registry.cn-hangzhou.aliyuncs.com/unipal/controller:latest
+        name: mykind-operator
+        ports:
+        - containerPort: 8080
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      serviceAccountName: controller-manager
+      terminationGracePeriodSeconds: 10
+      imagePullSecrets:
+      - name: regcred-vpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: mykind-operator
+  name: mykind-operator
+  namespace: default
+spec:
+  clusterIP: None
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: mykind-operator
+

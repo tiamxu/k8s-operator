@@ -1,0 +1,67 @@
+apiVersion: gopron.online/v1
+kind: DeployStack
+metadata:
+  labels:
+    app.kubernetes.io/name: deploystack
+    app.kubernetes.io/instance: deploystack-sample
+    app.kubernetes.io/part-of: deploy-operator
+    app.kuberentes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: deploy-operator
+  name: deploystack
+spec:
+  apps:
+    test:
+      replicas: 0
+      imageRegistry: github.com
+      registrySecrets: regcred-vpc
+      ports:
+      - name: grpc
+        port: 5010  
+  appsList:
+    hello: latest
+    test: latest
+  replicas: 0
+  imageRegistry: nginx
+  imagePullPolicy: Always
+  registrySecrets: regcred-vpc
+  namespace: default
+  configs:
+    CONFIG_SERVER_URL: http://nacos.gopron.online
+    PROFILES_ACTIVE: DEV
+    CONFIG_SERVER_USER: nacos
+    CONFIG_SERVER_PWDS: nacos
+  secret:
+    CONFIG_DB_USERNAME: cm9vdAo
+    CONFIG_DB_PASSWORD: MTIzNDU2Cg
+  service:
+    type: ClusterIP
+  ports:
+  - name: grpc
+    port: 5010
+  - name: http
+    port: 8800
+  resources:
+    requests:
+      cpu: 10m
+      memory: 100Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  ingress:
+  - host: hello.gopron.online
+    name: hello
+    port: 8080
+    https: true
+  - host: gw.gopron.online
+    name: hello
+    port: 8080
+    https: true
+    secretName: hello.2023.com
+  - host: test.gopron.online
+    name: test
+    port: 8080
+
+
+
+    
+  

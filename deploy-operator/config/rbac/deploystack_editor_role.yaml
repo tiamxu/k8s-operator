@@ -1,0 +1,31 @@
+# permissions for end users to edit deploystacks.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: deploystack-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: deploy-operator
+    app.kubernetes.io/part-of: deploy-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: deploystack-editor-role
+rules:
+- apiGroups:
+  - gopron.online
+  resources:
+  - deploystacks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gopron.online
+  resources:
+  - deploystacks/status
+  verbs:
+  - get

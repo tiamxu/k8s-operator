@@ -1,0 +1,15 @@
+domain: gopron.online
+layout:
+- go.kubebuilder.io/v3
+projectName: deploy-operator
+repo: github.com/tiamxu/k8s-operator/deploy-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: gopron.online
+  kind: DeployStack
+  path: github.com/tiamxu/k8s-operator/deploy-operator/api/v1
+  version: v1
+version: "3"

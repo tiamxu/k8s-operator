@@ -1,0 +1,36 @@
+apiVersion: gopron.online/v1
+kind: DeployStack
+metadata:
+  labels:
+    app.kubernetes.io/name: deploystack
+    app.kubernetes.io/instance: deploystack-sample
+    app.kubernetes.io/part-of: deploy-operator
+    app.kuberentes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: deploy-operator
+  name: deploystack
+spec:
+  appsList:
+    hello: b12
+    test: ""
+  replicas: 0
+  imageRegistry: registry-vpc.cn-hangzhou.aliyuncs.com/unipal
+  imagePullPolicy: Always
+  namespace: default
+  service:
+    type: LoadBalancer
+  ports:
+  - name: grpc
+    port: 5010
+  - name: http
+    port: 8800
+
+  configs:
+  env:
+  resource:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+    
