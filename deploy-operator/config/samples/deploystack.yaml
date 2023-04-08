@@ -31,8 +31,8 @@ spec:
     CONFIG_SERVER_USER: nacos
     CONFIG_SERVER_PWDS: nacos
   secret:
-    CONFIG_DB_USERNAME: cm9vdAo
-    CONFIG_DB_PASSWORD: MTIzNDU2Cg
+    CONFIG_DB_USERNAME: cm9vdAo=
+    CONFIG_DB_PASSWORD: MTIzNDU2Cg==
   service:
     type: ClusterIP
   ports:
