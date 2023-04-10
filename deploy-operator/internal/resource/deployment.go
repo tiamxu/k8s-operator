@@ -48,6 +48,9 @@ func (builder *DeployStackBuild) Deployment() *DeploymentBuild {
 
 	return &DeploymentBuild{builder}
 }
+func (builder *DeploymentBuild) GetObjectKind() (client.Object, error) {
+	return &appsv1.Deployment{}, nil
+}
 
 // var defaultAppList = map[string]string{"test":"latest",}
 
@@ -246,14 +249,14 @@ func (builder *DeploymentBuild) containerPorts(name string, containerPorts []Con
 
 	return ports
 }
-func (builder *DeploymentBuild) Update(object client.Object, name, tag string) error {
+func (builder *DeploymentBuild) Update(object client.Object, name, tag string) (client.Object, error) {
 	deploy := object.(*appsv1.Deployment)
 
 	//Replicas
 	deploy.Spec.Replicas = builder.Instance.Spec.Replicas
 	//pod template
 	deploy.Spec.Template = builder.podTemplateSpec(name, tag)
-	return nil
+	return deploy, nil
 }
 
 func (builder *DeploymentBuild) podTemplateSpec(name, tag string) corev1.PodTemplateSpec {

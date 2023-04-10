@@ -31,8 +31,13 @@ func (builder *DeployStackBuild) ConfigMap() *ConfigMapBuild {
 
 	return &ConfigMapBuild{builder}
 }
+
 func (builder *ConfigMapBuild) ExecStrategy() bool {
 	return false
+}
+
+func (builder *ConfigMapBuild) GetObjectKind() (client.Object, error) {
+	return &corev1.ConfigMap{}, nil
 }
 
 func (builder *ConfigMapBuild) Build(name, tag string) (client.Object, error) {
@@ -48,14 +53,14 @@ func (builder *ConfigMapBuild) Build(name, tag string) (client.Object, error) {
 	return &configMap, nil
 }
 
-func (builder *ConfigMapBuild) Update(object client.Object, name, tag string) error {
+func (builder *ConfigMapBuild) Update(object client.Object, name, tag string) (client.Object, error) {
 	configMap := object.(*corev1.ConfigMap)
 	if configMap.Data == nil {
 		configMap.Data = make(map[string]string)
 	}
 	configMap.Data = builder.Instance.Spec.Configs
 
-	return nil
+	return configMap, nil
 }
 
 // func (builder *ConfigMapBuild) configData() (map[string]string, error) {

@@ -16,7 +16,7 @@ spec:
       registrySecrets: regcred-vpc
       ports:
       - name: grpc
-        port: 5010  
+        port: 5010 
   appsList:
     hello: latest
     test: latest
@@ -47,21 +47,41 @@ spec:
     limits:
       cpu: 500m
       memory: 512Mi
+#路由: Prefix、Exact、ImplementationSpecific
   ingress:
   - host: hello.gopron.online
     name: hello
-    port: 8080
     https: true
+    match:
+      /hello/*: hello
+      /test/*: test
+    annotations:
+      nginx.ingress.kubernetes.io/enable-cors: "true"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
   - host: gw.gopron.online
     name: hello
-    port: 8080
-    https: true
-    secretName: hello.2023.com
+    match:
+      /hello22/*: hello
+      /test2/*: test
   - host: test.gopron.online
     name: test
-    port: 8080
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/server-snippet: |
+        set $agentflag 0;
+        if ($http_user_agent ~* "(python-requests|Apache-HttpClient|python)" ){
+          set $agentflag 1;
+        }
+        if ($request_uri ~* "(^/gaocc|diagnosis|/internet)" ){
+          set $agentflag 1;
+        }
+        if ( $agentflag = 1 ) {
+          return 444;
+        }
+    prefix:
+      /*: test 8081
+      /hello: hello
 
 
-
-    
-  
+  portForGrpc: 5010
+  portForHttp: 8080

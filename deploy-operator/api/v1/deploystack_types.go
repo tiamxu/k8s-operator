@@ -1,11 +1,6 @@
-/*
-Copyright 2023.
-*/
-
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,18 +27,23 @@ type DeployStackSpec struct {
 	Configs         map[string]string            `json:"configs,omitempty"`
 	Secret          map[string]string            `json:"secret,omitempty"`
 	Ingress         []IngressSpec                `json:"ingress,omitempty"`
-
+	PortForGrpc     int32                        `json:"portForGrpc,omitempty"`
+	PortForHttp     int32                        `json:"portForHttp,omitempty"`
 	// Override        DeployStackOverrideSpec      `json:"override,omitempty"`
 
 }
 
 type IngressSpec struct {
-	Name       string `json:"name,omitempty"`
-	Https      bool   `json:"https,omitempty"`
-	Host       string `json:"host,omitempty"`
-	Port       int32  `json:"port,omitempty"`
-	SecretName string `json:"secretName,omitempty"`
+	Name        string            `json:"name,omitempty"`
+	Https       bool              `json:"https,omitempty"`
+	Host        string            `json:"host,omitempty"`
+	Prefix      map[string]string `json:"prefix,omitempty"`
+	Exact       map[string]string `json:"exact,omitempty"`
+	Match       map[string]string `json:"match,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// Port        int32             `json:"port,omitempty"`
 }
+
 type AppsName struct {
 	Name            string         `json:"name,omitempty"`
 	Replicas        *int32         `json:"replicas,omitempty"`
@@ -84,10 +84,7 @@ type PodTemplateSpec struct {
 	Spec *corev1.PodSpec `json:"spec,omitempty"`
 }
 
-// DeployStackStatus defines the observed state of DeployStack
-type DeployStackStatus struct {
-	Status *appsv1.DeploymentStatus `json:"status,omitempty"`
-}
+
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status

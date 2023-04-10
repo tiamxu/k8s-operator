@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -20,14 +19,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	appList         map[string]string
-	namespace       string
-	resourceBuilder resource.DeployStackBuild
-	resources       client.Object
-	name            string
-	tag             string
-)
+// var (
+// 	// appList         map[string]string
+// 	// resourceBuilder resource.DeployStackBuild
+// 	resources client.Object
+// )
 
 type DeployStackReconciler struct {
 	client.Client
@@ -46,9 +42,17 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	deployStackInstance, err := r.getDeployStack(ctx, req.NamespacedName)
 	if err != nil {
-		logger.Error(err, "Not Found DeployStack Resource ,Please Create Kind DeployStack resource")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		// 如果资源不存在，则忽略
+		if errors.IsNotFound(err) {
+			logger.Error(err, "Not Found DeployStack Resource ,Please Create Kind DeployStack resource")
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+		logger.Error(err, "Failed to get DeployStack resource")
+		return ctrl.Result{}, err
 	}
+	// if client.IgnoreNotFound(err) != nil {
+
+	// }
 
 	logger.Info("Kind DeployStack Resource Normal...") //说明deploystack Kind已经创建
 	logger.Info("Start reconciling")
@@ -62,28 +66,23 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	//声明并初始化一个DeployStackBuild的结构体变量
 	// deploymentBuilder = resource.DeployStackBuild{Instance: deployStackInstance, Scheme: r.Scheme}
-	resourceBuilder = resource.DeployStackBuild{Instance: deployStackInstance, Scheme: r.Scheme}
+	resourceBuilder := resource.DeployStackBuild{Instance: deployStackInstance, Scheme: r.Scheme}
 
-	appList = deployStackInstance.Spec.AppsList
-	namespace = deployStackInstance.Spec.Namespace
+	appList := deployStackInstance.Spec.AppsList
+	namespace := deployStackInstance.Spec.Namespace
 	if appList == nil {
 		// appList = map[string]string{"test": "latest"}
 		return ctrl.Result{}, nil
 	}
-	for name, tag = range appList {
+	for name, tag := range appList {
 		builders := resourceBuilder.ResourceBuilds()
 		fondResourceName := name
+		var resources client.Object
 		for _, builder := range builders {
-			if resources, err = builder.Build(name, tag); err != nil {
+			//获取对于资源类型
+			if resources, err = builder.GetObjectKind(); err != nil {
 				return ctrl.Result{}, err
 			}
-
-			resourceObj, ok := r.getObjectKind(resources)
-			if !ok {
-				continue
-			}
-
-			logger.Info("Begin Fetch getResourceObj")
 
 			if _, ok := resources.(*corev1.ConfigMap); ok {
 				fondResourceName = "global-config"
@@ -101,43 +100,45 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			} else {
 				fondResourceName = name
 			}
-
-			err := r.getResourceObj(ctx, namespace, fondResourceName, resourceObj)
+			//获取对于资源类型currentResourcesObj:= &appsv1.Deployment{}
+			// resourceObj, ok := r.getObjectKind(resources)
+			// if !ok {
+			// 	continue
+			// }
+			// logger.Info("Begin Fetch getResourceObj")
+			currentResourceObj, err := r.getResourceObj(ctx, namespace, fondResourceName, resources)
 			if client.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, err
 			}
+			// 如果 对于 资源对象不存在，则创建
+			resourceObj := resources
 			if errors.IsNotFound(err) {
 				logger.Info("NotFound Resource for DeployStack, Create one", "Name", fondResourceName, "Kind", reflect.TypeOf(resourceObj))
+				//Create Resource
+				if resourceObj, err = builder.Build(name, tag); err != nil {
+					return ctrl.Result{}, err
+				}
 				if err := r.Client.Create(ctx, resourceObj); err != nil {
 					logger.Error(err, "Create Resource  Failed", "Name", fondResourceName, "Kind", reflect.TypeOf(resourceObj))
 					return ctrl.Result{}, err
 				}
 				r.Recorder.Eventf(resourceObj, corev1.EventTypeNormal, "Created", "Created resource %T", resourceObj)
 			} else {
-				logger.Info("Kind  resource already", "Name", fondResourceName, "Kind", reflect.TypeOf(resourceObj))
-				oldResourceVersion, err := r.getResourceVersion(ctx, namespace, fondResourceName, resourceObj)
-				if err != nil {
+				logger.Info("Kind  resource already", "Name", fondResourceName, "Kind", reflect.TypeOf(currentResourceObj))
+				// 如果资源对象存在，且需要更新，则更新
+				var newResourceObj client.Object
+				if newResourceObj, err = builder.Update(currentResourceObj, name, tag); err != nil {
 					return ctrl.Result{}, err
 				}
-				//Modify Resource
-				if err := builder.Update(resourceObj, fondResourceName, tag); err != nil {
+				// if !reflect.DeepEqual(newResourceObj, currentResourceObj) {
+				if err := r.Client.Update(ctx, newResourceObj); err != nil {
+					logger.Error(err, "Update Resource  Failed", "Name", fondResourceName, "Kind", reflect.TypeOf(newResourceObj))
 					return ctrl.Result{}, err
 				}
-				//Update
-				if err := r.Client.Update(ctx, resourceObj); err != nil {
-					logger.Error(err, "Update Resource  Failed", "Name", fondResourceName, "Kind", reflect.TypeOf(resourceObj))
-					return ctrl.Result{}, err
-				}
-				newResourceVersion, err := r.getResourceVersion(ctx, namespace, fondResourceName, resourceObj)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-				fmt.Printf("resourceName:%s,oldResourceVersion:%s,newResourceVersion:%s\n", fondResourceName, oldResourceVersion, newResourceVersion)
-				// 比较新旧资源对象的 resourceVersion 字段的值
-				if oldResourceVersion != newResourceVersion {
-					logger.Info("Kind Resource Updated", "Name", fondResourceName, "Kind", reflect.TypeOf(resourceObj))
-					r.Recorder.Eventf(resourceObj, corev1.EventTypeNormal, "Update", "Update Resource %T", resourceObj)
-				}
+				logger.Info("Kind Resource Updated", "Name", fondResourceName, "Kind", reflect.TypeOf(newResourceObj))
+				r.Recorder.Eventf(newResourceObj, corev1.EventTypeNormal, "Update", "Update Resource %T", newResourceObj)
+				// }
+
 			}
 
 		}
@@ -147,28 +148,36 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *DeployStackReconciler) getObjectKind(resources client.Object) (client.Object, bool) {
-	// logger := r.Log.WithValues("DeployStack")
-	//判断所对应的资源类型属于那个Kind，之后进入对于的逻辑中处理
-	switch resourceObj := resources.(type) {
-	case *appsv1.Deployment:
-		// logger.Info("Resource Kind Type", "Kind", reflect.TypeOf(resourceObj))
-		return resourceObj, true
-	case *corev1.Service:
-		// logger.Info("Resource Kind Type", "Kind", reflect.TypeOf(resourceObj))
-		return resourceObj, true
-	case *corev1.Secret:
-		return resourceObj, true
-	case *corev1.ConfigMap:
-		return resourceObj, true
-	case *v1.Ingress:
-		return resourceObj, true
-	default:
-		// logger.Info("Other Kind Type")
-		return nil, false
-	}
+// func (r *DeployStackReconciler) getObjectKind(resources client.Object) (client.Object, bool) {
+// 	// logger := r.Log.WithValues("DeployStack")
+// 	//判断所对应的资源类型属于那个Kind，之后进入对于的逻辑中处理
+// 	switch resourceObj := resources.(type) {
+// 	case *appsv1.Deployment:
+// 		// logger.Info("Resource Kind Type", "Kind", reflect.TypeOf(resourceObj))
+// 		resourceObj = resources.(*appsv1.Deployment)
+// 		return resourceObj, true
+// 	case *corev1.Service:
+// 		// logger.Info("Resource Kind Type", "Kind", reflect.TypeOf(resourceObj))
+// 		resourceObj = resources.(*corev1.Service)
 
-}
+// 		return resourceObj, true
+// 	case *corev1.Secret:
+// 		resourceObj = resources.(*corev1.Secret)
+
+// 		return resourceObj, true
+// 	case *corev1.ConfigMap:
+// 		resourceObj = resources.(*corev1.ConfigMap)
+// 		return resourceObj, true
+// 	case *v1.Ingress:
+// 		resourceObj = resources.(*v1.Ingress)
+
+// 		return resourceObj, true
+// 	default:
+// 		// logger.Info("Other Kind Type")
+// 		return nil, false
+// 	}
+
+// }
 
 // 查询DeployStack Kind
 func (r *DeployStackReconciler) getDeployStack(ctx context.Context, namespaceName types.NamespacedName) (*apiv1.DeployStack, error) {
@@ -180,20 +189,20 @@ func (r *DeployStackReconciler) getDeployStack(ctx context.Context, namespaceNam
 }
 
 // 查询资源，返回资源版本
-func (r *DeployStackReconciler) getResourceVersion(ctx context.Context, namespace, name string, obj client.Object) (string, error) {
-	if err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
-		return "", err
-	}
-	resourceVersion := obj.GetResourceVersion()
-	return resourceVersion, nil
-}
+// func (r *DeployStackReconciler) getResourceVersion(ctx context.Context, namespace, name string, obj client.Object) (string, error) {
+// 	if err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, obj); err != nil {
+// 		return "", err
+// 	}
+// 	resourceVersion := obj.GetResourceVersion()
+// 	return resourceVersion, nil
+// }
 
 // 查询对应资源
-func (r *DeployStackReconciler) getResourceObj(ctx context.Context, namespace, name string, resourceObj client.Object) error {
+func (r *DeployStackReconciler) getResourceObj(ctx context.Context, namespace, name string, resourceObj client.Object) (client.Object, error) {
 	if err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, resourceObj); err != nil {
-		return err
+		return resourceObj, err
 	}
-	return nil
+	return resourceObj, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

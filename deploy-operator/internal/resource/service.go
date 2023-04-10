@@ -22,6 +22,10 @@ func (builder *ServiceBuild) ExecStrategy() bool {
 	return true
 }
 
+func (builder *ServiceBuild) GetObjectKind() (client.Object, error) {
+	return &corev1.Service{}, nil
+}
+
 func (builder *ServiceBuild) Build(name, tag string) (client.Object, error) {
 
 	service = corev1.Service{
@@ -53,7 +57,7 @@ func (builder *ServiceBuild) servicePorts(name string, servicePorts []ServicePor
 	return ports
 }
 
-func (builder *ServiceBuild) Update(object client.Object, name, tag string) error {
+func (builder *ServiceBuild) Update(object client.Object, name, tag string) (client.Object, error) {
 	service := object.(*corev1.Service)
 	appsName := builder.Instance.Spec.Apps
 	apps, ok := appsName[name]
@@ -66,5 +70,5 @@ func (builder *ServiceBuild) Update(object client.Object, name, tag string) erro
 
 	}
 
-	return nil
+	return service, nil
 }

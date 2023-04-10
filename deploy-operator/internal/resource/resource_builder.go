@@ -17,8 +17,9 @@ type ServicePorts = apiv1.DefaultPorts
 
 type ResourceBuilder interface {
 	Build(name, tag string) (client.Object, error)
-	Update(object client.Object, name, tag string) error
+	Update(object client.Object, name, tag string) (client.Object, error)
 	ExecStrategy() bool
+	GetObjectKind() (client.Object, error)
 }
 type labels map[string]string
 

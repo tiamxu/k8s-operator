@@ -21,6 +21,9 @@ func (builder *DeployStackBuild) Secret() *SecretBuild {
 
 	return &SecretBuild{builder}
 }
+func (builder *SecretBuild) GetObjectKind() (client.Object, error) {
+	return &corev1.Secret{}, nil
+}
 
 // whether to execute this resource.
 func (builder *SecretBuild) ExecStrategy() bool {
@@ -39,13 +42,13 @@ func (builder *SecretBuild) Build(name, tag string) (client.Object, error) {
 	return &secret, nil
 }
 
-func (builder *SecretBuild) Update(object client.Object, name, tag string) error {
+func (builder *SecretBuild) Update(object client.Object, name, tag string) (client.Object, error) {
 	secret := object.(*corev1.Secret)
 	if secret.Data == nil {
 		secret.Data = make(map[string][]byte)
 	}
 	secret.Data = builder.convertString()
-	return nil
+	return secret, nil
 }
 
 // convert secret string to byte.
