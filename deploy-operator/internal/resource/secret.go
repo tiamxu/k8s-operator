@@ -9,8 +9,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
+// 定义全局secret配置
+var (
 	defaultSecretName string = "global-secret"
+	defaultEnvData           = map[string]string{
+		"CONFIG_DB_USERNAME":    "cm9vdAo=",
+		"CONFIG_DB_PASSWORD":    "MTIzNDU2Cg==",
+		"CONFIG_REDIS_PASSWORD": "MTIzNDU2Cg==",
+	}
 )
 
 type SecretBuild struct {
@@ -34,10 +40,11 @@ func (builder *SecretBuild) Build(name, tag string) (client.Object, error) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        defaultSecretName,
 			Namespace:   builder.Instance.Spec.Namespace,
-			Labels:      Labels(name),
+			Labels:      Labels(name, builder.Instance.Spec.Namespace),
 			Annotations: map[string]string{},
 		},
 		Data: builder.convertString(),
+		Type: corev1.SecretTypeOpaque,
 	}
 	return &secret, nil
 }
@@ -51,10 +58,20 @@ func (builder *SecretBuild) Update(object client.Object, name, tag string) (clie
 	return secret, nil
 }
 
-// convert secret string to byte.
+// convert secret base64 string to byte.
 func (builder *SecretBuild) convertString() map[string][]byte {
-	secretObj := builder.Instance.Spec.Secret
-	var data = make(map[string][]byte)
+	var (
+		data      = make(map[string][]byte)
+		secretObj = make(map[string]string)
+	)
+	if builder.Instance.Spec.Secret != nil {
+		secretObj = builder.Instance.Spec.Secret
+		for key, value := range secretObj {
+			defaultEnvData[key] = value
+		}
+	}
+	secretObj = defaultEnvData
+
 	for key, value := range secretObj {
 		//base64 Decode
 		value, err := base64.StdEncoding.DecodeString(value)
@@ -66,8 +83,21 @@ func (builder *SecretBuild) convertString() map[string][]byte {
 	return data
 }
 
-var (
-	secretData = map[string][]byte{
-		"CONFIG_DB_USERNAME": []byte("dW5pcG"),
-	}
-)
+// secret type:
+// 1、docker-registry: type: kubernetes.io/dockerconfigjson
+// 2、type: Opaque
+
+// const (
+// 	registrySecret = "regcred-vpc"
+// 	registryKey    = ".dockerconfigjson"
+// 	dockerRegistryConfig = `
+// 	{
+// 		"auths": {
+// 			"registry-vpc.cn-hangzhou.aliyuncs.com": {
+// 				"auth": "eGlhb21lbmdjb3JwOld0elV3aGttOUtDb3hNc1EzR1JU"
+// 			}
+// 		}
+
+// 	}
+// 	`
+// )

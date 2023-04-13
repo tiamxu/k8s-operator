@@ -11,42 +11,40 @@ metadata:
 spec:
   apps:
     test:
-      replicas: 0
-      imageRegistry: github.com
-      registrySecrets: regcred-vpc
+      # imageRegistry: github.com
       ports:
-      - name: grpc
-        port: 5010 
+      - name: dubbo
+        port: 9090 
   appsList:
-    hello: latest
     test: latest
+    hello: b11
   replicas: 0
-  imageRegistry: nginx
-  imagePullPolicy: Always
-  registrySecrets: regcred-vpc
+  # imageRegistry: nginx
+  # imagePullPolicy: Always
+  # registrySecrets: regcred-vpc
   namespace: default
   configs:
     CONFIG_SERVER_URL: http://nacos.gopron.online
     PROFILES_ACTIVE: DEV
     CONFIG_SERVER_USER: nacos
     CONFIG_SERVER_PWDS: nacos
-  secret:
-    CONFIG_DB_USERNAME: cm9vdAo=
-    CONFIG_DB_PASSWORD: MTIzNDU2Cg==
+  # secret:
+  #   CONFIG_DB_USERNAME: cm9vdAo=
+  #   CONFIG_DB_PASSWORD: MTIzNDU2Cg==
   service:
     type: ClusterIP
-  ports:
-  - name: grpc
-    port: 5010
-  - name: http
-    port: 8800
-  resources:
-    requests:
-      cpu: 10m
-      memory: 100Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
+  # ports:
+  # - name: grpc
+  #   port: 5010
+  # - name: http
+  #   port: 8800
+  # resources:
+  #   requests:
+  #     cpu: 10m
+  #     memory: 100Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 512Mi
 #路由: Prefix、Exact、ImplementationSpecific
   ingress:
   - host: hello.gopron.online
@@ -82,6 +80,13 @@ spec:
       /*: test 8081
       /hello: hello
 
-
+  #resources
+  resourcesMemory: 256Mi-1024Mi
+  resourcesCpu: 30m-300m
+  #port
   portForGrpc: 5010
   portForHttp: 8080
+  #volume
+  # volumeCmForConf: /www/config/
+  #volume
+  probeReadyTcpPort: 6060

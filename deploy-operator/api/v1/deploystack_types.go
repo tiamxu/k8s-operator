@@ -11,24 +11,26 @@ import (
 
 // DeployStackSpec defines the desired state of DeployStack
 type DeployStackSpec struct {
-	Apps            map[string]AppsName          `json:"apps,omitempty"`
-	AppsList        map[string]string            `json:"appsList,omitempty"`
-	Replicas        *int32                       `json:"replicas,omitempty"`
-	ImageRegistry   string                       `json:"imageRegistry,omitempty"`
-	ImagePullPolicy string                       `json:"imagePullPolicy,omitempty"`
-	RegistrySecrets string                       `json:"registrySecrets,omitempty"`
-	Namespace       string                       `json:"namespace,omitempty"`
-	Service         DeployStackServiceSpec       `json:"service,omitempty"`
-	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
-	Affinity        *corev1.Affinity             `json:"affinity,omitempty"`
-	Toleration      *corev1.Toleration           `json:"toleration,omitempty"`
-	Default         map[string]string            `json:"default,omitempty"`
-	Ports           []DefaultPorts               `json:"ports,omitempty"`
-	Configs         map[string]string            `json:"configs,omitempty"`
-	Secret          map[string]string            `json:"secret,omitempty"`
-	Ingress         []IngressSpec                `json:"ingress,omitempty"`
-	PortForGrpc     int32                        `json:"portForGrpc,omitempty"`
-	PortForHttp     int32                        `json:"portForHttp,omitempty"`
+	Apps              map[string]AppsName          `json:"apps,omitempty"`
+	AppsList          map[string]string            `json:"appsList,omitempty"`
+	Replicas          *int32                       `json:"replicas,omitempty"`
+	ImageRegistry     string                       `json:"imageRegistry,omitempty"`
+	RegistrySecrets   string                       `json:"registrySecrets,omitempty"`
+	Namespace         string                       `json:"namespace,omitempty"`
+	Service           DeployStackServiceSpec       `json:"service,omitempty"`
+	Resources         *corev1.ResourceRequirements `json:"resources,omitempty"`
+	Affinity          *corev1.Affinity             `json:"affinity,omitempty"`
+	Toleration        *corev1.Toleration           `json:"toleration,omitempty"`
+	Default           map[string]string            `json:"default,omitempty"`
+	Ports             []DefaultPorts               `json:"ports,omitempty"`
+	Configs           map[string]string            `json:"configs,omitempty"`
+	Secret            map[string]string            `json:"secret,omitempty"`
+	Ingress           []IngressSpec                `json:"ingress,omitempty"`
+	PortForGrpc       int32                        `json:"portForGrpc,omitempty"`
+	PortForHttp       int32                        `json:"portForHttp,omitempty"`
+	ResourcesMemory   string                       `json:"resourcesMemory,omitempty"`
+	ResourcesCpu      string                       `json:"resourcesCpu,omitempty"`
+	ProbeReadyTcpPort int32                        `json:"probeReadyTcpPort,omitempty"`
 	// Override        DeployStackOverrideSpec      `json:"override,omitempty"`
 
 }
@@ -49,7 +51,6 @@ type AppsName struct {
 	Replicas        *int32         `json:"replicas,omitempty"`
 	Namespace       string         `json:"namespace,omitempty"`
 	ImageRegistry   string         `json:"imageRegistry,omitempty"`
-	ImagePullPolicy string         `json:"imagePullPolicy,omitempty"`
 	RegistrySecrets string         `json:"registrySecrets,omitempty"`
 	Ports           []DefaultPorts `json:"ports,omitempty"`
 }
@@ -83,8 +84,6 @@ type DeploymentSpec struct {
 type PodTemplateSpec struct {
 	Spec *corev1.PodSpec `json:"spec,omitempty"`
 }
-
-
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status

@@ -866,8 +866,6 @@ spec:
               apps:
                 additionalProperties:
                   properties:
-                    imagePullPolicy:
-                      type: string
                     imageRegistry:
                       type: string
                     name:
@@ -903,8 +901,6 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
-              imagePullPolicy:
-                type: string
               imageRegistry:
                 type: string
               ingress:
@@ -952,7 +948,11 @@ spec:
                       type: integer
                   type: object
                 type: array
+              probeReadyTcpPort:
+                format: int32
+                type: integer
               registrySecrets:
+                description: ImagePullPolicy   corev1.PullPolicy            `json:"imagePullPolicy,omitempty"`
                 type: string
               replicas:
                 format: int32
@@ -983,6 +983,10 @@ spec:
                       to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                     type: object
                 type: object
+              resourcesCpu:
+                type: string
+              resourcesMemory:
+                type: string
               secret:
                 additionalProperties:
                   type: string

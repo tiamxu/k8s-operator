@@ -8,6 +8,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	portForGrpcDefault int32 = 5010
+	portForHttpDefault int32 = 8800
+)
+
 type DeployStackBuild struct {
 	Instance *apiv1.DeployStack
 	Scheme   *runtime.Scheme
@@ -36,12 +41,21 @@ func (builder *DeployStackBuild) ResourceBuilds() []ResourceBuilder {
 }
 func int64Ptr(i int64) *int64 { return &i }
 
-// func int32Ptr(i int32) *int32 { return &i }
+func int32Ptr(i int32) *int32 { return &i }
 
-func Labels(name string) labels {
+func Labels(name, env string) labels {
+	return labels{
+		"app":                    name,
+		"env":                    env,
+		"app.kubernetes.io/name": "deploystack",
+	}
+}
+
+func LabelsSelector(name, env string) labels {
 	return labels{
 		"app":     name,
-		"version": "prod",
+		"version": env,
+		// "env":     env,
 	}
 }
 

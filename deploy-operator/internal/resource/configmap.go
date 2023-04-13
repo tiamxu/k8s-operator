@@ -45,7 +45,7 @@ func (builder *ConfigMapBuild) Build(name, tag string) (client.Object, error) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        defaultConfigMapName,
 			Namespace:   builder.Instance.Spec.Namespace,
-			Labels:      Labels(name),
+			Labels:      Labels(name, builder.Instance.Spec.Namespace),
 			Annotations: map[string]string{},
 		},
 		Data: builder.Instance.Spec.Configs,

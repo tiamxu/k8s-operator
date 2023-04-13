@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -50,10 +51,6 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Error(err, "Failed to get DeployStack resource")
 		return ctrl.Result{}, err
 	}
-	// if client.IgnoreNotFound(err) != nil {
-
-	// }
-
 	logger.Info("Kind DeployStack Resource Normal...") //说明deploystack Kind已经创建
 	logger.Info("Start reconciling")
 
@@ -92,10 +89,14 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			} else if _, ok := resources.(*v1.Ingress); ok {
 				for _, ingress := range resourceBuilder.Instance.Spec.Ingress {
-					if name == ingress.Name {
+					if ingress.Name == name {
 						fondResourceName = resource.StringCombin(name, "-", "ingress")
 						break
 					}
+
+				}
+				if fondResourceName == "global-secret" {
+					continue
 				}
 			} else {
 				fondResourceName = name
@@ -140,38 +141,122 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				// }
 
 			}
-
 		}
 		logger.Info("#####end分割线####", "Name", name)
 	}
-
+	//删除多余服务
+	if err := r.resourcesDelete(ctx, deployStackInstance); err != nil {
+		logger.Error(err, "Failed to Delete DeployStack resource")
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
+func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, deployStack *apiv1.DeployStack) error {
+	resourceBuilder := resource.DeployStackBuild{Instance: deployStack, Scheme: r.Scheme}
+	builders := resourceBuilder.ResourceBuilds()
+	var (
+		err       error
+		resources client.Object
+	)
+	labelSelector := labels.SelectorFromSet(map[string]string{"app.kubernetes.io/name": "deploystack"})
+	listOps := &client.ListOptions{Namespace: deployStack.Spec.Namespace, LabelSelector: labelSelector}
+	for _, builder := range builders {
+		if resources, err = builder.GetObjectKind(); err != nil {
+			return err
+		}
+		switch resources.(type) {
+		case *appsv1.Deployment:
+			resourceObjList := &appsv1.DeploymentList{}
+			if err := r.List(ctx, resourceObjList, listOps); err != nil {
+				return err
+			}
+			for _, resourceObj := range resourceObjList.Items {
+				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
+					if err := r.Delete(ctx, &resourceObj); err != nil {
+						return err
+					}
+					r.Recorder.Eventf(&resourceObj, corev1.EventTypeNormal, "Deleted", "Deleted Resource %T", resourceObj)
+				}
+			}
+		case *corev1.Service:
+			resourceObjList := &corev1.ServiceList{}
+			if err := r.List(ctx, resourceObjList, listOps); err != nil {
+				return err
+			}
+			for _, resourceObj := range resourceObjList.Items {
+				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
+					if err := r.Delete(ctx, &resourceObj); err != nil {
+						return err
+					}
+					r.Recorder.Eventf(&resourceObj, corev1.EventTypeNormal, "Deleted", "Deleted Resource %T", resourceObj)
+				}
+			}
+		case *corev1.Secret:
+			resourceObjList := &corev1.SecretList{}
+			if err := r.List(ctx, resourceObjList, listOps); err != nil {
+				return err
+			}
+			for _, resourceObj := range resourceObjList.Items {
+				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
+					if err := r.Delete(ctx, &resourceObj); err != nil {
+						return err
+					}
+					r.Recorder.Eventf(&resourceObj, corev1.EventTypeNormal, "Deleted", "Deleted Resource %T", resourceObj)
+				}
+			}
+		case *corev1.ConfigMap:
+			resourceObjList := &corev1.ConfigMapList{}
+			if err := r.List(ctx, resourceObjList, listOps); err != nil {
+				return err
+			}
+			for _, resourceObj := range resourceObjList.Items {
+				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
+					if err := r.Delete(ctx, &resourceObj); err != nil {
+						return err
+					}
+					r.Recorder.Eventf(&resourceObj, corev1.EventTypeNormal, "Deleted", "Deleted Resource %T", resourceObj)
+				}
+			}
+		case *v1.Ingress:
+			resourceObjList := &v1.IngressList{}
+			if err := r.List(ctx, resourceObjList, listOps); err != nil {
+				return err
+			}
+			for _, resourceObj := range resourceObjList.Items {
+				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
+					if err := r.Delete(ctx, &resourceObj); err != nil {
+						return err
+					}
+					r.Recorder.Eventf(&resourceObj, corev1.EventTypeNormal, "Deleted", "Deleted Resource %T", resourceObj)
+				}
+			}
+		}
 
-// func (r *DeployStackReconciler) getObjectKind(resources client.Object) (client.Object, bool) {
-// 	// logger := r.Log.WithValues("DeployStack")
+	}
+
+	return nil
+}
+
+// func (r *DeployStackReconciler) getObjectResourceList(resources client.Object) (client.ObjectList, bool) {
 // 	//判断所对应的资源类型属于那个Kind，之后进入对于的逻辑中处理
-// 	switch resourceObj := resources.(type) {
+// 	switch resources.(type) {
 // 	case *appsv1.Deployment:
 // 		// logger.Info("Resource Kind Type", "Kind", reflect.TypeOf(resourceObj))
-// 		resourceObj = resources.(*appsv1.Deployment)
-// 		return resourceObj, true
+// 		resourceObjList := &appsv1.DeploymentList{}
+// 		return resourceObjList, true
 // 	case *corev1.Service:
 // 		// logger.Info("Resource Kind Type", "Kind", reflect.TypeOf(resourceObj))
-// 		resourceObj = resources.(*corev1.Service)
-
-// 		return resourceObj, true
+// 		resourceObjList := &corev1.ServiceList{}
+// 		return resourceObjList, true
 // 	case *corev1.Secret:
-// 		resourceObj = resources.(*corev1.Secret)
-
-// 		return resourceObj, true
+// 		resourceObjList := &corev1.SecretList{}
+// 		return resourceObjList, true
 // 	case *corev1.ConfigMap:
-// 		resourceObj = resources.(*corev1.ConfigMap)
-// 		return resourceObj, true
+// 		resourceObjList := &corev1.ConfigMapList{}
+// 		return resourceObjList, true
 // 	case *v1.Ingress:
-// 		resourceObj = resources.(*v1.Ingress)
-
-// 		return resourceObj, true
+// 		resourceObjList := &v1.IngressList{}
+// 		return resourceObjList, true
 // 	default:
 // 		// logger.Info("Other Kind Type")
 // 		return nil, false
