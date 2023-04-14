@@ -1,0 +1,227 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: serviceaccount
+    app.kuberentes.io/instance: controller-manager
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: deploy-operator
+    app.kubernetes.io/part-of: deploy-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: controller-manager
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: role
+    app.kubernetes.io/instance: leader-election-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: deploy-operator
+    app.kubernetes.io/part-of: deploy-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: leader-election-role
+  namespace: kube-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: rolebinding
+    app.kubernetes.io/instance: leader-election-rolebinding
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: deploy-operator
+    app.kubernetes.io/part-of: deploy-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: leader-election-rolebinding
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: controller-manager
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - deployments
+  - services
+  - configmaps
+  - secrets
+  - ingresses
+  - events
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gopron.online
+  resources:
+  - deploystacks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gopron.online
+  resources:
+  - deploystacks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - gopron.online
+  resources:
+  - deploystacks/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrolebinding
+    app.kubernetes.io/instance: manager-rolebinding
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: deploy-operator
+    app.kubernetes.io/part-of: deploy-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-role
+subjects:
+- kind: ServiceAccount
+  name: controller-manager
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deploy-manager
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: deploy-operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/name: deploy-operator
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: deploy-operator
+      labels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/name: deploy-operator
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+      - command:
+        - /manager
+        args:
+        - --leader-elect
+        image: registry.cn-hangzhou.aliyuncs.com/unipal/controller:latest
+        name: deploy-operator
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      serviceAccountName: controller-manager
+      terminationGracePeriodSeconds: 10
+      imagePullSecrets:
+      - name: regcred-vpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: deploy-operator
+  name: deploy-operator
+  namespace: kube-system
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/name: deploy-operator

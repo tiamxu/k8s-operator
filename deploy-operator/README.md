@@ -8,5 +8,16 @@ deploy-operator: 模版生成工具
 ```
  kubectl apply -f config/samples/deploystack.yaml
 ```
+# 构建
+```
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o manager
+docker build -t registry.cn-hangzhou.aliyuncs.com/unipal/controller -f Dockerfile-dev .
+docker push registry.cn-hangzhou.aliyuncs.com/unipal/controller:latest
+```  
+# 权限
+```
+kubectl apply -f config/manager/deploystack-operator.yaml
+```
 # 功能
 ...
+

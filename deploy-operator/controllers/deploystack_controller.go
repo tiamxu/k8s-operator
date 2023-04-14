@@ -144,7 +144,7 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		logger.Info("#####end分割线####", "Name", name)
 	}
-	//删除多余服务
+	//删除多余服务,通过资源标签过滤
 	if err := r.resourcesDelete(ctx, deployStackInstance); err != nil {
 		logger.Error(err, "Failed to Delete DeployStack resource")
 		return ctrl.Result{}, err
@@ -172,6 +172,7 @@ func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, deployStack
 			}
 			for _, resourceObj := range resourceObjList.Items {
 				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
+					//deployment no longer exists in the deploystack spec, so delete it
 					if err := r.Delete(ctx, &resourceObj); err != nil {
 						return err
 					}
@@ -197,6 +198,9 @@ func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, deployStack
 				return err
 			}
 			for _, resourceObj := range resourceObjList.Items {
+				if resourceObj.Name == "global-secret" {
+					continue
+				}
 				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
 					if err := r.Delete(ctx, &resourceObj); err != nil {
 						return err
@@ -210,6 +214,9 @@ func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, deployStack
 				return err
 			}
 			for _, resourceObj := range resourceObjList.Items {
+				if resourceObj.Name == "global-config" {
+					continue
+				}
 				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
 					if err := r.Delete(ctx, &resourceObj); err != nil {
 						return err

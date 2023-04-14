@@ -6,6 +6,23 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - '*'
+  resources:
+  - deployments
+  - services
+  - configmaps
+  - secrets
+  - ingresses
+  - events
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - gopron.online
   resources:
   - deploystacks

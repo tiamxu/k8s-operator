@@ -1,0 +1,6 @@
+# Build the manager binary
+FROM registry.cn-hangzhou.aliyuncs.com/unipal/unipal-alpine:3.17
+COPY manager /manager
+WORKDIR /
+USER 65532:65532
+ENTRYPOINT ["/manager"]

@@ -11,18 +11,18 @@ metadata:
 spec:
   apps:
     test:
+      replicas: 0
       # imageRegistry: github.com
-      ports:
-      - name: dubbo
-        port: 9090 
+      # ports:
+      # - name: dubbo
+      #   port: 9090 
   appsList:
-    test: latest
-    hello: b11
-  replicas: 0
-  # imageRegistry: nginx
+    hello: latest
+  replicas: 2
+  imageRegistry: registry.cn-hangzhou.aliyuncs.com/unipal
   # imagePullPolicy: Always
   # registrySecrets: regcred-vpc
-  namespace: default
+  namespace: prod
   configs:
     CONFIG_SERVER_URL: http://nacos.gopron.online
     PROFILES_ACTIVE: DEV
@@ -89,4 +89,7 @@ spec:
   #volume
   # volumeCmForConf: /www/config/
   #volume
-  probeReadyTcpPort: 6060
+  probeReadyForHttp: true
+  probeReadyTcpPort: 8800
+  probeReadyHttpPort: 6060
+

@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultNamespace     string = "dev"
-	defaultImageRegistry string = "registry-vpc.cn-hangzhou.aliyuncs.com"
+	defaultImageRegistry string = "registry.cn-hangzhou.aliyuncs.com/unipal"
 	//IfNotPresent、Always
 	defaultImagePullPolicy  corev1.PullPolicy = "IfNotPresent"
 	defaultImagePullSecrets string            = "regcred-vpc"
@@ -219,25 +219,53 @@ func (builder *DeploymentBuild) podTemplateSpec(name, tag string) corev1.PodTemp
 		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
 			Command: []string{"/bin/sh", "-c", "sleep 20"},
 		}}}
-	livenessProbe := corev1.Probe{
+	var (
+		livenessProbe  corev1.Probe
+		readinessProbe corev1.Probe
+	)
+	probeReadyTcpPort := builder.Instance.Spec.ProbeReadyTcpPort
+	probeReadyHttpPort := builder.Instance.Spec.ProbeReadyHttpPort
+
+	livenessProbe = corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/ops/alive",
-				Port: intstr.FromInt(6060),
+			TCPSocket: &corev1.TCPSocketAction{
+				// Port: intstr.IntOrString{Type: intstr.Int, IntVal: probeTcpPort},
+				Port: intstr.FromInt(probeReadyTcpPort),
 			},
 		},
 		InitialDelaySeconds: 30,
 		TimeoutSeconds:      5,
 	}
-	readinessProbe := corev1.Probe{
+	readinessProbe = corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/ops/alive",
-				Port: intstr.FromInt(6060),
+			TCPSocket: &corev1.TCPSocketAction{
+				Port: intstr.FromInt(probeReadyTcpPort),
 			},
 		},
 		InitialDelaySeconds: 15,
 		TimeoutSeconds:      5,
+	}
+	if builder.Instance.Spec.ProbeReadyForHttp {
+		livenessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ops/alive",
+					Port: intstr.FromInt(probeReadyHttpPort),
+				},
+			},
+			InitialDelaySeconds: 30,
+			TimeoutSeconds:      5,
+		}
+		readinessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ops/alive",
+					Port: intstr.FromInt(probeReadyHttpPort),
+				},
+			},
+			InitialDelaySeconds: 15,
+			TimeoutSeconds:      5,
+		}
 	}
 
 	//image
@@ -264,7 +292,7 @@ func (builder *DeploymentBuild) podTemplateSpec(name, tag string) corev1.PodTemp
 		}
 	}
 	if builder.Instance.Spec.ImageRegistry != "" {
-		image = fmt.Sprintf("%s/%s_%s:%s", builder.Instance.Spec.ImageRegistry, builder.Instance.Namespace, name, tag)
+		image = fmt.Sprintf("%s/%s_%s:%s", builder.Instance.Spec.ImageRegistry, namespace, name, tag)
 	} else {
 		image = fmt.Sprintf("%s/%s:%s", defaultImageRegistry, name, tag)
 	}
