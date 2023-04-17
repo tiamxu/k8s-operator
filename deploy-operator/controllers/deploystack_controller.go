@@ -12,8 +12,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,6 +42,27 @@ type DeployStackReconciler struct {
 func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// ctx = context.Background()
 	logger := r.Log.WithValues("DeployStack", req.NamespacedName)
+	deployStack, err := r.GetUnstructObject(ctx, req.NamespacedName)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	deployStackSpec, err := json.Marshal(deployStack.Object["spec"])
+	if err != nil {
+		logger.Error(err, "Failed to marshal deployStackSpec yaml")
+	}
+	logger.V(1).Info("DeployStackKind", "deployStackSpec", string(deployStackSpec))
+	// deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
+	// if ok {
+	// 	fmt.Println("deployStackSpec", deployStackSpec)
+	// }
+	// defaultConfig, ok := deployStackSpec["default"].([]string)
+	// if ok {
+	// 	fmt.Printf("####type:%T,defaultConfig:%v\n", defaultConfig, defaultConfig)
+	// 	for _, v := range defaultConf {
+	// 		fmt.Printf("v:%v\n", v)
+	// 	}
+
+	// }
 
 	deployStackInstance, err := r.getDeployStack(ctx, req.NamespacedName)
 	if err != nil {
@@ -116,7 +139,7 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if errors.IsNotFound(err) {
 				logger.Info("NotFound Resource for DeployStack, Create one", "Name", fondResourceName, "Kind", reflect.TypeOf(resourceObj))
 				//Create Resource
-				if resourceObj, err = builder.Build(name, tag); err != nil {
+				if resourceObj, err = builder.Build(name, tag, deployStack); err != nil {
 					return ctrl.Result{}, err
 				}
 				if err := r.Client.Create(ctx, resourceObj); err != nil {
@@ -128,7 +151,11 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				logger.Info("Kind  resource already", "Name", fondResourceName, "Kind", reflect.TypeOf(currentResourceObj))
 				// 如果资源对象存在，且需要更新，则更新
 				var newResourceObj client.Object
-				if newResourceObj, err = builder.Update(currentResourceObj, name, tag); err != nil {
+				// if newResourceObj, err = builder.Update(currentResourceObj, name, tag, deployStack); err != nil {
+				// 	return ctrl.Result{}, err
+				// }
+
+				if newResourceObj, err = builder.Build(name, tag, deployStack); err != nil {
 					return ctrl.Result{}, err
 				}
 				// if !reflect.DeepEqual(newResourceObj, currentResourceObj) {
@@ -244,32 +271,18 @@ func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, deployStack
 	return nil
 }
 
-// func (r *DeployStackReconciler) getObjectResourceList(resources client.Object) (client.ObjectList, bool) {
-// 	//判断所对应的资源类型属于那个Kind，之后进入对于的逻辑中处理
-// 	switch resources.(type) {
-// 	case *appsv1.Deployment:
-// 		// logger.Info("Resource Kind Type", "Kind", reflect.TypeOf(resourceObj))
-// 		resourceObjList := &appsv1.DeploymentList{}
-// 		return resourceObjList, true
-// 	case *corev1.Service:
-// 		// logger.Info("Resource Kind Type", "Kind", reflect.TypeOf(resourceObj))
-// 		resourceObjList := &corev1.ServiceList{}
-// 		return resourceObjList, true
-// 	case *corev1.Secret:
-// 		resourceObjList := &corev1.SecretList{}
-// 		return resourceObjList, true
-// 	case *corev1.ConfigMap:
-// 		resourceObjList := &corev1.ConfigMapList{}
-// 		return resourceObjList, true
-// 	case *v1.Ingress:
-// 		resourceObjList := &v1.IngressList{}
-// 		return resourceObjList, true
-// 	default:
-// 		// logger.Info("Other Kind Type")
-// 		return nil, false
-// 	}
-
-// }
+func (r *DeployStackReconciler) GetUnstructObject(ctx context.Context, namespaceName types.NamespacedName) (*unstructured.Unstructured, error) {
+	deployStack := &unstructured.Unstructured{}
+	deployStack.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "gopron.online",
+		Kind:    "DeployStack",
+		Version: "v1",
+	})
+	if err := r.Client.Get(ctx, namespaceName, deployStack); err != nil {
+		return deployStack, err
+	}
+	return deployStack, nil
+}
 
 // 查询DeployStack Kind
 func (r *DeployStackReconciler) getDeployStack(ctx context.Context, namespaceName types.NamespacedName) (*apiv1.DeployStack, error) {
@@ -301,10 +314,10 @@ func (r *DeployStackReconciler) getResourceObj(ctx context.Context, namespace, n
 func (r *DeployStackReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.DeployStack{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
-		Owns(&v1.Ingress{}).
+		// Owns(&appsv1.Deployment{}).
+		// Owns(&corev1.Service{}).
+		// Owns(&corev1.ConfigMap{}).
+		// Owns(&corev1.Secret{}).
+		// Owns(&v1.Ingress{}).
 		Complete(r)
 }

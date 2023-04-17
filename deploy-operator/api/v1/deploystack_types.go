@@ -10,29 +10,31 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // DeployStackSpec defines the desired state of DeployStack
+// +kubebuilder:pruning:PreserveUnknownFields
 type DeployStackSpec struct {
-	Apps               map[string]AppsName          `json:"apps,omitempty"`
-	AppsList           map[string]string            `json:"appsList,omitempty"`
-	Replicas           *int32                       `json:"replicas,omitempty"`
-	ImageRegistry      string                       `json:"imageRegistry,omitempty"`
-	RegistrySecrets    string                       `json:"registrySecrets,omitempty"`
-	Namespace          string                       `json:"namespace,omitempty"`
-	Service            DeployStackServiceSpec       `json:"service,omitempty"`
-	Resources          *corev1.ResourceRequirements `json:"resources,omitempty"`
-	Affinity           *corev1.Affinity             `json:"affinity,omitempty"`
-	Toleration         *corev1.Toleration           `json:"toleration,omitempty"`
-	Default            map[string]string            `json:"default,omitempty"`
-	Ports              []DefaultPorts               `json:"ports,omitempty"`
-	Configs            map[string]string            `json:"configs,omitempty"`
-	Secret             map[string]string            `json:"secret,omitempty"`
-	Ingress            []IngressSpec                `json:"ingress,omitempty"`
-	PortForGrpc        int32                        `json:"portForGrpc,omitempty"`
-	PortForHttp        int32                        `json:"portForHttp,omitempty"`
-	ResourcesMemory    string                       `json:"resourcesMemory,omitempty"`
-	ResourcesCpu       string                       `json:"resourcesCpu,omitempty"`
-	ProbeReadyTcpPort  int                          `json:"probeReadyTcpPort,omitempty"`
-	ProbeReadyHttpPort int                          `json:"probeReadyHttpPort,omitempty"`
-	ProbeReadyForHttp  bool                         `json:"probeReadyForHttp,omitempty"`
+	// Apps     map[string]AppsName `json:"apps,omitempty"`
+	AppsList map[string]string              `json:"appsList,omitempty"`
+	AppsConf map[string]map[string][]string `json:"appsConf,omitempty"`
+	// Replicas        *int32                       `json:"replicas,omitempty"`
+	// ImageRegistry   string                       `json:"imageRegistry,omitempty"`
+	// RegistrySecrets string                       `json:"registrySecrets,omitempty"`
+	Namespace string                 `json:"namespace,omitempty"`
+	Service   DeployStackServiceSpec `json:"service,omitempty"`
+	// Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Default     []string          `json:"default,omitempty"`
+	Ports       []DefaultPorts    `json:"ports,omitempty"`
+	Configs     map[string]string `json:"configs,omitempty"`
+	Secret      map[string]string `json:"secret,omitempty"`
+	Ingress     []IngressSpec     `json:"ingress,omitempty"`
+	PortForGrpc int32             `json:"portForGrpc,omitempty"`
+	PortForHttp int32             `json:"portForHttp,omitempty"`
+	// ResourcesMemoryForDefault string            `json:"resourcesMemoryForDefault,omitempty"`
+	// ResourcesCpuForDefault    string            `json:"resourcesCpuForDefault,omitempty"`
+	ProbeReadyTcpPort  int  `json:"probeReadyTcpPort,omitempty"`
+	ProbeReadyHttpPort int  `json:"probeReadyHttpPort,omitempty"`
+	ProbeReadyForHttp  bool `json:"probeReadyForHttp,omitempty"`
+	// ReplicasForDefault        *int32            `json:"replicasForDefault,omitempty"`
 }
 
 type IngressSpec struct {
@@ -81,12 +83,8 @@ type PodTemplateSpec struct {
 	Spec *corev1.PodSpec `json:"spec,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-// +kubebuilder:printcolumn:name="Image",type="string",priority=1,JSONPath=".spec.image",description="The Docker Image of DeployStack"
-// +kubebuilder:printcolumn:name="Size",type="integer",JSONPath=".spec.size",description="Replicas of DeployStack"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-//+kubebuilder:subresource:status
-
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // DeployStack is the Schema for the deploystacks API
 type DeployStack struct {
 	metav1.TypeMeta   `json:",inline"`

@@ -31,18 +31,7 @@ func (builder *ServiceBuild) Build(name, tag string) (client.Object, error) {
 	}}
 	namespace := builder.Instance.Spec.Namespace
 
-	if builder.Instance.Spec.Ports != nil {
-		ports = builder.servicePorts(name, builder.Instance.Spec.Ports)
-	} else {
-		if builder.Instance.Spec.PortForGrpc != 0 {
-			ports = []corev1.ServicePort{{
-				Name: StringCombin("grpc", "-", name),
-				Port: builder.Instance.Spec.PortForGrpc,
-			}}
-		} else {
-			ports = defaultPorts
-		}
-	}
+	ports = defaultPorts
 	service := corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Service",
@@ -85,13 +74,6 @@ func (builder *ServiceBuild) Update(object client.Object, name, tag string) (cli
 				Name: StringCombin("grpc", "-", name),
 				Port: builder.Instance.Spec.PortForGrpc,
 			}}
-		}
-	}
-
-	appsName := builder.Instance.Spec.Apps
-	if apps, ok := appsName[name]; ok {
-		if apps.Ports != nil {
-			service.Spec.Ports = append(service.Spec.Ports, builder.servicePorts(name, apps.Ports)...)
 		}
 	}
 

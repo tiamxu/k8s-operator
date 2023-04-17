@@ -9,42 +9,43 @@ metadata:
     app.kubernetes.io/created-by: deploy-operator
   name: deploystack
 spec:
-  apps:
-    test:
-      replicas: 0
-      # imageRegistry: github.com
-      # ports:
-      # - name: dubbo
-      #   port: 9090 
+# 服务列表(前缀+"-"+服务名称:版本)
   appsList:
     hello: latest
-  replicas: 2
-  imageRegistry: registry.cn-hangzhou.aliyuncs.com/unipal
-  # imagePullPolicy: Always
-  # registrySecrets: regcred-vpc
-  namespace: prod
-  configs:
-    CONFIG_SERVER_URL: http://nacos.gopron.online
-    PROFILES_ACTIVE: DEV
-    CONFIG_SERVER_USER: nacos
-    CONFIG_SERVER_PWDS: nacos
-  # secret:
-  #   CONFIG_DB_USERNAME: cm9vdAo=
-  #   CONFIG_DB_PASSWORD: MTIzNDU2Cg==
-  service:
-    type: ClusterIP
-  # ports:
-  # - name: grpc
-  #   port: 5010
-  # - name: http
-  #   port: 8800
-  # resources:
-  #   requests:
-  #     cpu: 10m
-  #     memory: 100Mi
-  #   limits:
-  #     cpu: 500m
-  #     memory: 512Mi
+    wxweb: latest
+
+  appsConf:
+    web:
+      wxweb:
+      - replicasForWeb
+    app:
+      hello:
+      - replicasForHello
+      - resourcesMemoryForHello
+  hello:
+  - replicasForHello
+  - resourcesMemoryForHello
+  #以下按服务类定义配置:web、go、node、java等
+  #前端类
+  web:
+  - replicasForWeb
+  #后端类
+  app:
+  - portForGrpc
+  - replicasForDefault
+  #..其他类
+   #默认通用配置项
+  default:
+  - replicasForDefault
+  - resourcesMemoryForDefault
+  - resourcesCpuForDefault
+  - imageRegistryForDefault
+  - imageSecretsForDefault
+  - imageNamespaceForDefault
+  - volumeCmForDefault
+
+
+
 #路由: Prefix、Exact、ImplementationSpecific
   ingress:
   - host: hello.gopron.online
@@ -65,31 +66,37 @@ spec:
     name: test
     annotations:
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/server-snippet: |
-        set $agentflag 0;
-        if ($http_user_agent ~* "(python-requests|Apache-HttpClient|python)" ){
-          set $agentflag 1;
-        }
-        if ($request_uri ~* "(^/gaocc|diagnosis|/internet)" ){
-          set $agentflag 1;
-        }
-        if ( $agentflag = 1 ) {
-          return 444;
-        }
     prefix:
       /*: test 8081
       /hello: hello
-
+  #env
+  #configmap:global-config
+  configMapName: global-config
+  configs:
+  #secret:global-secret
+  secret:
   #resources
-  resourcesMemory: 256Mi-1024Mi
-  resourcesCpu: 30m-300m
+  resourcesMemoryForDefault: 10Mi-100Mi
+  resourcesCpuForDefault: 10m-100m
+  resourcesMemoryForHello: 512Mi-2048Mi
   #port
-  portForGrpc: 5010
+  portForGrpc: 5011
   portForHttp: 8080
   #volume
-  # volumeCmForConf: /www/config/
-  #volume
+  volumeCmForDefault: /www/config
+  volumeCmForData: /www/config
+  #probe
   probeReadyForHttp: true
   probeReadyTcpPort: 8800
   probeReadyHttpPort: 6060
+  #images
+  imageRegistryForDefault: registry.cn-hangzhou.aliyuncs.com/unipal
+  imageSecretsForDefault: regcred-vpc
+  imageNamespaceForDefault: prod
 
+  #replicas
+  replicasForDefault: 1
+  replicasForHello: 0
+  #namespace
+  namespaceForDefault: prod
+  namespace: prod
