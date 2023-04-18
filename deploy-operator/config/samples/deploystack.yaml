@@ -9,34 +9,33 @@ metadata:
     app.kubernetes.io/created-by: deploy-operator
   name: deploystack
 spec:
+#全局配置项：default; 分类配置项:web、app、node; 自定义服务配置:appsConf
+#default配置项:xxForDefault命名; 自定义服务配置项: xxForName命名,
+#对于k8s列表配置项：name=key, value=value
 # 服务列表(前缀+"-"+服务名称:版本)
   appsList:
     hello: latest
     wxweb: latest
-
+#服务配置，支持覆盖，[keyForName:value]
   appsConf:
     web:
       wxweb:
-      - replicasForWeb
+      - replicasForDefault:2
     app:
       hello:
-      - replicasForHello
-      - resourcesMemoryForHello
-  hello:
-  - replicasForHello
-  - resourcesMemoryForHello
+      - replicasForDefault
+      - resourcesCpuForDefault
+      - volumeCmForDefault:/www/conf
   #以下按服务类定义配置:web、go、node、java等
   #前端类
   web:
-  - replicasForWeb
+  - replicasForDefault
   #后端类
   app:
-  - portForGrpc
-  - replicasForDefault
+  - resourcesMemoryForDefault
   #..其他类
    #默认通用配置项
   default:
-  - replicasForDefault
   - resourcesMemoryForDefault
   - resourcesCpuForDefault
   - imageRegistryForDefault
@@ -80,6 +79,8 @@ spec:
   resourcesCpuForDefault: 10m-100m
   resourcesMemoryForHello: 512Mi-2048Mi
   #port
+  portHttpForDefault: 8080
+  portGrpcForDefault: 5010
   portForGrpc: 5011
   portForHttp: 8080
   #volume
@@ -87,8 +88,9 @@ spec:
   volumeCmForData: /www/config
   #probe
   probeReadyForHttp: true
-  probeReadyTcpPort: 8800
-  probeReadyHttpPort: 6060
+  probeReadyTcpForWeb: 8800
+  probeReadyHttpForDefault: 6060
+  probeReadyTcpPort: 6060
   #images
   imageRegistryForDefault: registry.cn-hangzhou.aliyuncs.com/unipal
   imageSecretsForDefault: regcred-vpc
@@ -97,6 +99,7 @@ spec:
   #replicas
   replicasForDefault: 1
   replicasForHello: 0
+  replicasForWeb: 1
   #namespace
   namespaceForDefault: prod
   namespace: prod

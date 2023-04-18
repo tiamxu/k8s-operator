@@ -2,6 +2,7 @@ package resource
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -60,33 +61,39 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 	// if !ok {
 	// 	return nil, fmt.Errorf("Not Found deployStack Spec")
 	// }
-
-	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("deployStack.Object is error")
+	appsConfObj, err := builder.getAppConf(name, deployStack)
+	if err != nil {
+		return nil, err
 	}
-	//通用配置项
-	defaultForConfig, ok := deployStackSpec["default"].([]interface{})
+	appConf, ok := appsConfObj[name]
 	if !ok {
-		return nil, fmt.Errorf("defaultForConfig  error")
+		return nil, fmt.Errorf("appConf error:%v", appConf)
 	}
-	for _, key := range defaultForConfig {
+	fmt.Printf("####appsConf:%v\n", appsConfObj)
+	for key, valueConf := range appConf {
+		fmt.Printf("####key:%v,type:%T, value:%v\n", key, valueConf, valueConf)
 		switch key {
 		case "replicasForDefault":
-			value, ok := deployStackSpec[key.(string)].(int64)
-			if !ok {
+			if value, ok := valueConf.(int64); ok {
+				replicas = intFromPtr(value)
+
+			} else if value, ok := valueConf.(string); ok {
+				tmp, _ := strconv.Atoi(value)
+				replicas = intFromPtr(int64(tmp))
+
+			} else {
 				return nil, fmt.Errorf("%v Error", key)
 			}
-			replicas = intFromPtr(value)
+
 		case "resourcesMemoryForDefault":
-			value, ok := deployStackSpec[key.(string)].(string)
+			value, ok := valueConf.(string)
 			if !ok {
 				return nil, fmt.Errorf("%v Error", key)
 			}
 			requestMem, limitMem = stringsSplit(value)
 
 		case "resourcesCpuForDefault":
-			value, ok := deployStackSpec[key.(string)].(string)
+			value, ok := valueConf.(string)
 			if !ok {
 				return nil, fmt.Errorf("%v Error", key)
 
@@ -94,82 +101,85 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 			requestCpu, limitCpu = stringsSplit(value)
 
 		case "imageRegistryForDefault":
-			value, ok := deployStackSpec[key.(string)].(string)
+			value, ok := valueConf.(string)
 			if !ok {
 				return nil, fmt.Errorf("%v Error", key)
 			}
 			image = value
 
 		case "imageSecretsForDefault":
-			value, ok := deployStackSpec[key.(string)].(string)
+			value, ok := valueConf.(string)
 			if !ok {
 				return nil, fmt.Errorf("%v Error", key)
 			}
 			registrySecret = value
 
 		case "imageNamespaceForDefault":
-			value, ok := deployStackSpec[key.(string)].(string)
+			value, ok := valueConf.(string)
 			if !ok {
 				return nil, fmt.Errorf("%v Error", key)
 			}
 			namespace = value
 
 		default:
+
 		}
-
 	}
+	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("deployStack.Object is error")
+	}
+	//通用配置项
+	// defaultForConfig := builder.Instance.Spec.Default
 
-	// var appConfObj map[string]interface{}
-
-	// for key, _ := range deployStackSpec {
-	// 	// fmt.Println(key, appConf)
+	// for _, key := range defaultForConfig {
 	// 	switch key {
-	// 	case "web":
-	// 		//web h5
-	// 		if confApp, ok := deployStackSpec["web"]; ok {
-	// 			if appConfObj, ok = confApp.(map[string]interface{}); !ok {
-	// 				return nil, fmt.Errorf("confWeb  error")
-	// 			}
+	// 	case "replicasForDefault":
+	// 		value, ok := deployStackSpec[key].(int64)
+	// 		if !ok {
+	// 			return nil, fmt.Errorf("%v Error", key)
 	// 		}
+	// 		replicas = intFromPtr(value)
+	// 	case "resourcesMemoryForDefault":
+	// 		value, ok := deployStackSpec[key].(string)
+	// 		if !ok {
+	// 			return nil, fmt.Errorf("%v Error", key)
+	// 		}
+	// 		requestMem, limitMem = stringsSplit(value)
 
-	// }
-	// fmt.Println(appConfObj)
+	// 	case "resourcesCpuForDefault":
+	// 		value, ok := deployStackSpec[key].(string)
+	// 		if !ok {
+	// 			return nil, fmt.Errorf("%v Error", key)
 
-	//server
-	// if confApp, ok := deployStackSpec["app"]; ok {
-	// 	if appConfObj, ok = confApp.(map[string]interface{}); !ok {
-	// 		return nil, fmt.Errorf("confApp  error")
+	// 		}
+	// 		requestCpu, limitCpu = stringsSplit(value)
+
+	// 	case "imageRegistryForDefault":
+	// 		value, ok := deployStackSpec[key].(string)
+	// 		if !ok {
+	// 			return nil, fmt.Errorf("%v Error", key)
+	// 		}
+	// 		image = value
+
+	// 	case "imageSecretsForDefault":
+	// 		value, ok := deployStackSpec[key].(string)
+	// 		if !ok {
+	// 			return nil, fmt.Errorf("%v Error", key)
+	// 		}
+	// 		registrySecret = value
+
+	// 	case "imageNamespaceForDefault":
+	// 		value, ok := deployStackSpec[key].(string)
+	// 		if !ok {
+	// 			return nil, fmt.Errorf("%v Error", key)
+	// 		}
+	// 		namespace = value
+
+	// 	default:
 	// 	}
-	// }
-	// appConfObj = deployStackSpec
 
-	//自定义服务配置
-	if appServer, ok := deployStackSpec[name]; ok {
-		for _, key := range appServer.([]interface{}) {
-			switch key {
-			case fmt.Sprintf("replicasFor%s", strings.Title(name)):
-				// if value, ok := deployStackSpec[key.(string)].(int64); ok {
-				// 	replicas = intFromPtr(value)
-				// }
-				value, _, _ := unstructured.NestedInt64(deployStack.Object, "spec", fmt.Sprintf("replicasFor%s", strings.Title(name)))
-				replicas = intFromPtr(value)
-			case fmt.Sprintf("resourcesMemoryFor%s", strings.Title(name)):
-				value, ok := deployStackSpec[key.(string)].(string)
-				if !ok {
-					return nil, fmt.Errorf("%v Error", key)
-				}
-				requestMem, limitMem = stringsSplit(value)
-			case fmt.Sprintf("resourcesCpuFor%s", strings.Title(name)):
-				value, ok := deployStackSpec[key.(string)].(string)
-				if !ok {
-					return nil, fmt.Errorf("%v Error", key)
-				}
-				requestCpu, limitCpu = stringsSplit(value)
-			default:
-			}
-		}
-	}
-	// fmt.Println(fmt.Sprintf("replicasFor%s", strings.Title(name)))
+	// }
 
 	resources = corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -188,26 +198,7 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 		},
 		}
 	}
-	fmt.Printf("replicas:%v,namespace:%v,ports:%v,resources:%v\n", *replicas, namespace, ports, resources)
-
-	appsConf := builder.Instance.Spec.AppsConf
-	for k, _ := range deployStackSpec {
-		for kk, vv := range appsConf {
-			if kk == k {
-				fmt.Printf("kk:%v,vv:%v\n", kk, vv)
-				confApp, ok := deployStackSpec[k].([]interface{})
-				if !ok {
-					return nil, fmt.Errorf("confApp  error")
-				}
-				fmt.Printf("confApp:%v \n", confApp)
-				for _, vvv := range confApp {
-					fmt.Printf("vvv%v\n", vvv)
-				}
-			}
-		}
-		// fmt.Printf("kk:%v,vv:%v\n", kk, vv)
-
-	}
+	// fmt.Printf("replicas:%v,namespace:%v,ports:%v,resources:%v\n", *replicas, namespace, ports, resources)
 
 	// namespace = builder.Instance.Spec.Namespace
 	// podTemplateSpec := builder.podTemplateSpec(name, tag, deployStack)
@@ -658,4 +649,182 @@ func stringsSplit(name string) (request string, limit string) {
 		limit = str[1]
 	}
 	return request, limit
+}
+
+// func (builder *DeploymentBuild) getAppConf(name string, deployStack *unstructured.Unstructured) (map[string][]string, error) {
+// 	var appConf = make(map[string][]string)
+// 	// var appValue = make(map[string][]string)
+// 	var confValue = []string{}
+// 	// var appType string
+// 	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
+// 	if !ok {
+// 		return nil, fmt.Errorf("deployStack.Object is error")
+// 	}
+// 	defaultForConfig := builder.Instance.Spec.Default
+
+// 	appsConf := builder.Instance.Spec.AppsConf
+// 	for appType, appValue := range appsConf {
+// 		// fmt.Printf("appType:%v,appValue:%v\n", appType, appValue)
+// 		if value, ok := appValue[name]; ok {
+// 			if keys, ok := deployStackSpec[appType]; ok {
+// 				for _, key := range keys.([]interface{}) {
+// 					confValue = append(confValue, key.(string))
+// 				}
+// 			}
+// 			confValue = append(confValue, value...)
+// 			appConf[name] = uniqueStrings(confValue)
+// 		}
+// 	}
+// 	if len(confValue) == 0 {
+// 		appConf[name] = uniqueStrings(defaultForConfig)
+// 	}
+// 	// fmt.Printf("appType:%v,appConf:%v\n", appType, appConf)
+// 	//自定义服务配置：type：web、app、name
+// 	return appConf, nil
+// }
+
+// type:
+
+func uniqueStrings(confValue []string) []string {
+	uniqueMap := make(map[string]bool)
+	for _, s := range confValue {
+		uniqueMap[s] = true
+	}
+	uniqueConfValue := make([]string, 0, len(uniqueMap))
+	for k := range uniqueMap {
+		uniqueConfValue = append(uniqueConfValue, k)
+	}
+	return uniqueConfValue
+}
+
+// 定义一个函数，返回服务的配置
+func (builder *DeploymentBuild) getAppConf(name string, deployStack *unstructured.Unstructured) (map[string]map[string]interface{}, error) {
+	var appConf = make(map[string]map[string]interface{})
+	// var confValue = []string{}
+	var confMap = make(map[string]interface{})
+	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("deployStack.Object is error")
+	}
+	defaultForConfig := builder.Instance.Spec.Default
+	if len(defaultForConfig) == 0 || defaultForConfig == nil {
+		return nil, fmt.Errorf("defaultForConfig error,not values or nil")
+	}
+	//默认配置项
+	for _, key := range defaultForConfig {
+		if _, ok := deployStackSpec[key]; ok {
+			confMap[key] = deployStackSpec[key]
+		}
+	}
+	appsConf := builder.Instance.Spec.AppsConf
+	if len(appsConf) == 0 {
+		return nil, fmt.Errorf("appsConf error,not values")
+	}
+	for appType, appValue := range appsConf {
+		if appTypeConf, ok := appValue[name]; ok {
+			//自定义服务配置：type：web、app
+			if keys, ok := deployStackSpec[appType]; ok {
+				for _, key := range keys.([]interface{}) {
+					// confValue = append(confValue, key.(string))
+					//分类配置项
+					if _, ok := deployStackSpec[key.(string)]; ok {
+						confMap[key.(string)] = deployStackSpec[key.(string)]
+					}
+				}
+			}
+			//自定义服务配置项
+			for _, key := range appTypeConf {
+				if _, ok := deployStackSpec[key]; ok {
+					confMap[key] = deployStackSpec[key]
+				}
+				k, value := getConfKeyValue(key)
+				if value != nil {
+					confMap[k] = value
+				}
+
+			}
+			appConf[name] = confMap
+
+		}
+	}
+
+	return appConf, nil
+}
+
+// 获取配置
+func (builder *DeploymentBuild) getDefaultConf(confValue []string, confDefault, deployStackSpec map[string]interface{}) (map[string]interface{}, error) {
+	// var confDefault = make(map[string]interface{})
+	// deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
+	// if !ok {
+	// 	return nil, fmt.Errorf("deployStack.Object is error")
+	// }
+	for _, key := range confValue {
+		switch key {
+		case "replicasForDefault":
+			value, ok := deployStackSpec[key].(int64)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			confDefault[key] = value
+		case "resourcesMemoryForDefault":
+			value, ok := deployStackSpec[key].(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			confDefault[key] = value
+
+		case "resourcesCpuForDefault":
+			value, ok := deployStackSpec[key].(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			confDefault[key] = value
+
+		case "imageRegistryForDefault":
+			value, ok := deployStackSpec[key].(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			confDefault[key] = value
+
+		case "imageSecretsForDefault":
+			value, ok := deployStackSpec[key].(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			confDefault[key] = value
+
+		case "imageNamespaceForDefault":
+			value, ok := deployStackSpec[key].(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			confDefault[key] = value
+		default:
+		}
+	}
+	return confDefault, nil
+}
+
+// 字符串后缀是否为Default,自定义服务配置处理
+func getConfKeyValue(conf string) (string, interface{}) {
+	var (
+		key   string
+		value interface{}
+	)
+	trimStr := strings.TrimSpace(conf)
+	//使用空格分割字符串
+	// str := strings.Fields(trimStr)
+	str := strings.Split(trimStr, ":")
+	if len(str) == 1 {
+		key = trimStr
+		value = nil
+	} else if len(str) == 2 {
+		key = str[0]
+		value = str[1]
+	} else {
+		key = str[0]
+		value = str[1:]
+	}
+	return key, value
 }
