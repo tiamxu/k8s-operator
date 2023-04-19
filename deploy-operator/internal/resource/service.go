@@ -32,7 +32,7 @@ func (builder *ServiceBuild) Build(name, tag string, deployStack *unstructured.U
 		namespace string
 		ports     []corev1.ServicePort
 	)
-	appsConfObj, err := GetAppConf(name, deployStack, d)
+	appsConfObj, _, err := GetAppConf(name, deployStack, d)
 	if err != nil {
 		return nil, err
 	}

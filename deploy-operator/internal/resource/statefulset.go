@@ -46,7 +46,7 @@ func (builder *StatefulSetBuild) Build(name, tag string, deployStack *unstructur
 	if tag == "" {
 		tag = defaultTag
 	}
-	appsConfObj, err := GetAppConf(name, deployStack, d)
+	appsConfObj, _, err := GetAppConf(name, deployStack, d)
 	if err != nil {
 		return nil, err
 	}
@@ -254,12 +254,12 @@ func (builder *StatefulSetBuild) Build(name, tag string, deployStack *unstructur
 	sts := appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: builder.Instance.Spec.Namespace,
+			Namespace: namespace,
 			Labels:    map[string]string{},
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: name,
-			Selector:    &metav1.LabelSelector{MatchLabels: LabelsSelector(name, builder.Instance.Spec.Namespace)},
+			Selector:    &metav1.LabelSelector{MatchLabels: LabelsSelector(name, namespace)},
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{

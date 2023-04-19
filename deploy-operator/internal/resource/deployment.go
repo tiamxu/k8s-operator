@@ -61,7 +61,7 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 	// if !ok {
 	// 	return nil, fmt.Errorf("Not Found deployStack Spec")
 	// }
-	appsConfObj, err := GetAppConf(name, deployStack, d)
+	appsConfObj, _, err := GetAppConf(name, deployStack, d)
 	if err != nil {
 		return nil, err
 	}
@@ -265,6 +265,38 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 			TimeoutSeconds:      5,
 		}
 	}
+	//PodTemplateSpec
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{},
+			Labels:      LabelsSelector(name, namespace),
+		},
+		Spec: corev1.PodSpec{
+			NodeSelector: map[string]string{},
+			Affinity:     &affinity,
+			Containers: []corev1.Container{{
+				Name:            name,
+				Image:           image,
+				ImagePullPolicy: imagePullPolicy,
+				// Command:         command,
+				// Args:            args,
+				Ports:          ports,
+				Resources:      resources,
+				Env:            env,
+				EnvFrom:        envFrom,
+				VolumeMounts:   volumeMounts,
+				LivenessProbe:  &livenessProbe,
+				ReadinessProbe: &readinessProbe,
+				Lifecycle:      &lifecycle,
+			}},
+			TerminationGracePeriodSeconds: int64Ptr(30),
+			Volumes:                       volumes,
+			ImagePullSecrets: []corev1.LocalObjectReference{{
+				Name: registrySecret,
+			}},
+		},
+	}
+
 	//deployment
 	deployment := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -285,36 +317,7 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 				},
 			},
 			Replicas: replicas,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{},
-					Labels:      LabelsSelector(name, namespace),
-				},
-				Spec: corev1.PodSpec{
-					NodeSelector: map[string]string{},
-					Affinity:     &affinity,
-					Containers: []corev1.Container{{
-						Name:            name,
-						Image:           image,
-						ImagePullPolicy: imagePullPolicy,
-						// Command:         command,
-						// Args:            args,
-						Ports:          ports,
-						Resources:      resources,
-						Env:            env,
-						EnvFrom:        envFrom,
-						VolumeMounts:   volumeMounts,
-						LivenessProbe:  &livenessProbe,
-						ReadinessProbe: &readinessProbe,
-						Lifecycle:      &lifecycle,
-					}},
-					TerminationGracePeriodSeconds: int64Ptr(30),
-					Volumes:                       volumes,
-					ImagePullSecrets: []corev1.LocalObjectReference{{
-						Name: registrySecret,
-					}},
-				},
-			},
+			Template: podTemplateSpec,
 		},
 	}
 

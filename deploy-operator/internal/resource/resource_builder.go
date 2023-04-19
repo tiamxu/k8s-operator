@@ -27,6 +27,7 @@ type labels map[string]string
 func (builder *DeployStackBuild) ResourceBuilds() []ResourceBuilder {
 	builders := []ResourceBuilder{
 		builder.Deployment(),
+		builder.StatefulSet(),
 		builder.Service(),
 		// builder.ConfigMap(),
 		// builder.Secret(),
@@ -75,16 +76,17 @@ func StringsSplit(name string) (request string, limit string) {
 	return request, limit
 }
 
-func GetAppConf(name string, deployStack *unstructured.Unstructured, builder DeployStackBuild) (map[string]map[string]interface{}, error) {
+func GetAppConf(name string, deployStack *unstructured.Unstructured, builder DeployStackBuild) (map[string]map[string]interface{}, string, error) {
 	var appConf = make(map[string]map[string]interface{})
 	var confMap = make(map[string]interface{})
+	var serverType string
 	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("deployStack.Object is error")
+		return nil, "", fmt.Errorf("deployStack.Object is error")
 	}
 	defaultForConfig := builder.Instance.Spec.Default
 	if len(defaultForConfig) == 0 || defaultForConfig == nil {
-		return nil, fmt.Errorf("defaultForConfig error,not values or nil")
+		return nil, "", fmt.Errorf("defaultForConfig error,not values or nil")
 	}
 	//默认配置项
 	for _, key := range defaultForConfig {
@@ -92,13 +94,14 @@ func GetAppConf(name string, deployStack *unstructured.Unstructured, builder Dep
 			confMap[key] = deployStackSpec[key]
 		}
 	}
+
 	appsConf := builder.Instance.Spec.AppsConf
 	if len(appsConf) == 0 {
-		return nil, fmt.Errorf("appsConf error,not values")
+		return nil, "", fmt.Errorf("appsConf error,not values")
 	}
 	for appType, appValue := range appsConf {
 		if appTypeConf, ok := appValue[name]; ok {
-			//自定义服务配置：type：web、app
+			//自定义服务配置：type：web、app、sts
 			if keys, ok := deployStackSpec[appType]; ok {
 				for _, key := range keys.([]interface{}) {
 					// confValue = append(confValue, key.(string))
@@ -132,9 +135,10 @@ func GetAppConf(name string, deployStack *unstructured.Unstructured, builder Dep
 				}
 			}
 			appConf[name] = confMap
+			serverType = appType
 
 		}
 	}
 
-	return appConf, nil
+	return appConf, serverType, nil
 }

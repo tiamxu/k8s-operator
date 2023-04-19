@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -98,17 +99,28 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		builders := resourceBuilder.ResourceBuilds()
 		fondResourceName := name
 		var resources client.Object
+		_, serviceType, _ := resource.GetAppConf(name, deployStack, resourceBuilder)
+		fmt.Printf("#name:%v,serviceType:%v\n", name, serviceType)
 		for _, builder := range builders {
 			//获取对于资源类型
+
 			if resources, err = builder.GetObjectKind(); err != nil {
 				return ctrl.Result{}, err
 			}
-			if _, ok := resources.(*corev1.ConfigMap); ok {
+			if _, ok := resources.(*appsv1.Deployment); ok {
+				if serviceType == "sts" {
+					continue
+				}
+			} else if _, ok := resources.(*corev1.ConfigMap); ok {
 				fondResourceName = "global-config"
 
 			} else if _, ok := resources.(*corev1.Secret); ok {
 				fondResourceName = "global-secret"
 
+			} else if _, ok := resources.(*appsv1.StatefulSet); ok {
+				if serviceType != "sts" {
+					continue
+				}
 			} else if _, ok := resources.(*v1.Ingress); ok {
 				for _, ingress := range resourceBuilder.Instance.Spec.Ingress {
 					if ingress.Name == name {
@@ -314,6 +326,7 @@ func (r *DeployStackReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.DeployStack{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		// Owns(&corev1.ConfigMap{}).
 		// Owns(&corev1.Secret{}).

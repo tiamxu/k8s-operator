@@ -17,6 +17,7 @@ spec:
   appsList:
     hello: latest
     wxweb: latest
+    broker: latest
 #服务配置，支持覆盖，[keyForName:value]
   appsConf:
     web:
@@ -30,6 +31,10 @@ spec:
       - resourcesCpuForDefault
       - volumeCmForDefault:/www/conf
       - volumeSecretForCerts
+    sts:
+      broker:
+      - volumeSecretForCerts
+
   #以下按服务类定义配置:web、go、node、java等
   #前端类
   web:
@@ -39,6 +44,10 @@ spec:
   app:
   - portForGrpc
   - resourcesMemoryForDefault
+  sts:
+  - portForHttp
+  - volumeSecretForCerts
+
   #..其他类
    #默认通用配置项
    #portFor 定义端口,格式:portFor+自定义名字
@@ -59,7 +68,6 @@ spec:
   - namespaceForDefault
   - volumeCmForDefault
   - probeReadyTcpForDefault
-
 
 
 #路由: Prefix、Exact、ImplementationSpecific
