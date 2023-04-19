@@ -38,10 +38,14 @@ func (builder *DeploymentBuild) GetObjectKind() (client.Object, error) {
 
 func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructured.Unstructured) (client.Object, error) {
 	var (
-		namespace, image, registrySecret string
-		replicas                         *int32
-		requestMem, limitMem             string
-		requestCpu, limitCpu             string
+		namespace, image, registrySecret, imageNamespace string
+		replicas                                         *int32
+		requestMem, limitMem                             string
+		requestCpu, limitCpu                             string
+		probePort                                        int
+		probeReadyHttp                                   bool
+		volumes                                          []corev1.Volume
+		volumeMounts                                     []corev1.VolumeMount
 	)
 	var (
 		ports           []corev1.ContainerPort
@@ -49,10 +53,6 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 		resources       corev1.ResourceRequirements
 	)
 
-	var (
-		configSuffix string = "config"
-		// prefixSuffix string = "config"
-	)
 	if tag == "" {
 		tag = defaultTag
 	}
@@ -73,7 +73,7 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 	for key, valueConf := range appConf {
 		fmt.Printf("####key:%v,type:%T, value:%v\n", key, valueConf, valueConf)
 		switch key {
-		case "replicasForDefault":
+		case "replicasForDefault", "replicasForWeb", "replicasForApp", fmt.Sprintf("replicasFor%s", strings.Title(name)):
 			if value, ok := valueConf.(int64); ok {
 				replicas = intFromPtr(value)
 
@@ -84,7 +84,6 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 			} else {
 				return nil, fmt.Errorf("%v Error", key)
 			}
-
 		case "resourcesMemoryForDefault":
 			value, ok := valueConf.(string)
 			if !ok {
@@ -119,68 +118,59 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 			if !ok {
 				return nil, fmt.Errorf("%v Error", key)
 			}
+			imageNamespace = value
+		case "namespaceForDefault":
+			value, ok := valueConf.(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
 			namespace = value
+		case "volumeCmForDefault", "volumeSecretForCerts":
+			suffix, volumeSource := volumeSourceForSuffix(key)
+			value, ok := valueConf.(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			volumesPath := value
+			volumes = append(volumes, containerVolumes(name, suffix, volumeSource)...)
+			volumeMounts = append(volumeMounts, containerVolumeMounts(name, suffix, volumesPath)...)
 
+		case "portGrpcForDefault":
+			value, ok := valueConf.(int64)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			ports = []corev1.ContainerPort{{
+				Name:          StringCombin("grpc", "-", name),
+				ContainerPort: int32(value),
+			},
+			}
+		case "probeReadyTcpForDefault":
+			if value, ok := valueConf.(int64); ok {
+				probePort = int(value)
+
+			} else if value, ok := valueConf.(string); ok {
+				tmp, _ := strconv.Atoi(value)
+				probePort = tmp
+
+			} else {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+		case "probeHttpEnable":
+			if value, ok := valueConf.(bool); ok {
+				probeReadyHttp = value
+
+			} else if value, ok := valueConf.(string); ok {
+				tmp, _ := strconv.ParseBool(value)
+				probeReadyHttp = tmp
+
+			} else {
+				return nil, fmt.Errorf("%v Error", key)
+			}
 		default:
 
 		}
 	}
-	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("deployStack.Object is error")
-	}
-	//通用配置项
-	// defaultForConfig := builder.Instance.Spec.Default
-
-	// for _, key := range defaultForConfig {
-	// 	switch key {
-	// 	case "replicasForDefault":
-	// 		value, ok := deployStackSpec[key].(int64)
-	// 		if !ok {
-	// 			return nil, fmt.Errorf("%v Error", key)
-	// 		}
-	// 		replicas = intFromPtr(value)
-	// 	case "resourcesMemoryForDefault":
-	// 		value, ok := deployStackSpec[key].(string)
-	// 		if !ok {
-	// 			return nil, fmt.Errorf("%v Error", key)
-	// 		}
-	// 		requestMem, limitMem = stringsSplit(value)
-
-	// 	case "resourcesCpuForDefault":
-	// 		value, ok := deployStackSpec[key].(string)
-	// 		if !ok {
-	// 			return nil, fmt.Errorf("%v Error", key)
-
-	// 		}
-	// 		requestCpu, limitCpu = stringsSplit(value)
-
-	// 	case "imageRegistryForDefault":
-	// 		value, ok := deployStackSpec[key].(string)
-	// 		if !ok {
-	// 			return nil, fmt.Errorf("%v Error", key)
-	// 		}
-	// 		image = value
-
-	// 	case "imageSecretsForDefault":
-	// 		value, ok := deployStackSpec[key].(string)
-	// 		if !ok {
-	// 			return nil, fmt.Errorf("%v Error", key)
-	// 		}
-	// 		registrySecret = value
-
-	// 	case "imageNamespaceForDefault":
-	// 		value, ok := deployStackSpec[key].(string)
-	// 		if !ok {
-	// 			return nil, fmt.Errorf("%v Error", key)
-	// 		}
-	// 		namespace = value
-
-	// 	default:
-	// 	}
-
-	// }
-
 	resources = corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			"memory": resource.MustParse(requestMem),
@@ -191,23 +181,24 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 			"cpu":    resource.MustParse(limitCpu),
 		},
 	}
-	if xx, ok := deployStackSpec["portForGrpc"].(int64); ok {
-		ports = []corev1.ContainerPort{{
-			Name:          StringCombin("grpc", "-", name),
-			ContainerPort: int32(xx),
-		},
-		}
-	}
+
 	// fmt.Printf("replicas:%v,namespace:%v,ports:%v,resources:%v\n", *replicas, namespace, ports, resources)
-
-	// namespace = builder.Instance.Spec.Namespace
-	// podTemplateSpec := builder.podTemplateSpec(name, tag, deployStack)
-	// env := envVarObject(namespace, name)
-	// envFrom := envVarFrom()
-	// appsName := builder.Instance.Spec.Apps
-	// if apps, ok := appsName[name]; ok {
-
-	// }
+	//image
+	image = fmt.Sprintf("%s/%s_%s:%s", image, imageNamespace, name, tag)
+	if image == "" {
+		image = fmt.Sprintf("%s/%s_%s:%s", defaultImageRegistry, defaultNamespace, name, tag)
+	}
+	if registrySecret == "" {
+		registrySecret = defaultImagePullSecrets
+	}
+	if tag == defaultTag {
+		imagePullPolicy = "Always"
+	} else {
+		imagePullPolicy = defaultImagePullPolicy
+	}
+	//env
+	env := envVarObject(namespace, name)
+	envFrom := envVarFrom()
 
 	affinity := corev1.Affinity{
 		PodAntiAffinity: &corev1.PodAntiAffinity{
@@ -230,34 +221,34 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 			},
 		},
 	}
-	volumeCmForData, _, _ := unstructured.NestedString(deployStack.Object, "spec", "volumeCmForData")
-	volumes := []corev1.Volume{
-		{
-			Name: fmt.Sprintf("%s-%s", name, configSuffix),
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name,
-					},
-				},
-			},
-		},
-	}
-	volumeMounts := []corev1.VolumeMount{
-		{Name: fmt.Sprintf("%s-%s", name, configSuffix), MountPath: volumeCmForData},
-	}
+	//volume
+	// volumeCmForData, _, _ := unstructured.NestedString(deployStack.Object, "spec", "volumeCmForData")
+	// volumes := []corev1.Volume{
+	// 	{
+	// 		Name: fmt.Sprintf("%s-%s", name, configSuffix),
+	// 		VolumeSource: corev1.VolumeSource{
+	// 			ConfigMap: &corev1.ConfigMapVolumeSource{
+	// 				LocalObjectReference: corev1.LocalObjectReference{
+	// 					Name: name,
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// }
+	// volumeMounts := []corev1.VolumeMount{
+	// 	{Name: fmt.Sprintf("%s-%s", name, configSuffix), MountPath: volumeCmForData},
+	// }
+	//check health
 	lifecycle := corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
 			Command: []string{"/bin/sh", "-c", "sleep 20"},
 		}}}
 
-	probeReadyTcpPort := builder.Instance.Spec.ProbeReadyTcpPort
-	// probeReadyHttpPort := builder.Instance.Spec.ProbeReadyHttpPort
 	livenessProbe := corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			TCPSocket: &corev1.TCPSocketAction{
 				// Port: intstr.IntOrString{Type: intstr.Int, IntVal: probeTcpPort},
-				Port: intstr.FromInt(probeReadyTcpPort),
+				Port: intstr.FromInt(probePort),
 			},
 		},
 		InitialDelaySeconds: 30,
@@ -266,12 +257,35 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 	readinessProbe := corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			TCPSocket: &corev1.TCPSocketAction{
-				Port: intstr.FromInt(probeReadyTcpPort),
+				Port: intstr.FromInt(probePort),
 			},
 		},
 		InitialDelaySeconds: 15,
 		TimeoutSeconds:      5,
 	}
+	if probeReadyHttp {
+		livenessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ops/alive",
+					Port: intstr.FromInt(probePort),
+				},
+			},
+			InitialDelaySeconds: 30,
+			TimeoutSeconds:      5,
+		}
+		readinessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ops/alive",
+					Port: intstr.FromInt(probePort),
+				},
+			},
+			InitialDelaySeconds: 15,
+			TimeoutSeconds:      5,
+		}
+	}
+	//deployment
 	deployment := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
@@ -305,10 +319,10 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 						ImagePullPolicy: imagePullPolicy,
 						// Command:         command,
 						// Args:            args,
-						Ports:     ports,
-						Resources: resources,
-						// Env:            env,
-						// EnvFrom:        envFrom,
+						Ports:          ports,
+						Resources:      resources,
+						Env:            env,
+						EnvFrom:        envFrom,
 						VolumeMounts:   volumeMounts,
 						LivenessProbe:  &livenessProbe,
 						ReadinessProbe: &readinessProbe,
@@ -374,273 +388,31 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 // 	return ports
 // }
 
-// func (builder *DeploymentBuild) containerPort(name string) []corev1.ContainerPort {
-// 	var ports []corev1.ContainerPort
-// 	if builder.Instance.Spec.PortForGrpc != 0 {
-// 		ports = []corev1.ContainerPort{{
-// 			Name:          StringCombin("grpc", "-", name),
-// 			ContainerPort: builder.Instance.Spec.PortForGrpc,
-// 		},
-// 		}
-// 	}
-// 	if builder.Instance.Spec.PortForHttp != 0 {
-// 		ports = append(ports, corev1.ContainerPort{
-// 			Name:          StringCombin("http", "-", name),
-// 			ContainerPort: builder.Instance.Spec.PortForHttp,
-// 		})
-// 	}
+func envVarObject(namespace, name string) []corev1.EnvVar {
+	env := []corev1.EnvVar{
+		{Name: "CONFIG_ENV", Value: namespace},
+		{Name: "MY_SERVICE_NAME", Value: name},
+	}
+	return env
+}
 
-// 	return ports
-// }
+func envVarFrom() []corev1.EnvFromSource {
+	envFrom := []corev1.EnvFromSource{
+		{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "global-config",
+				}},
+		},
+		{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "global-secret"}},
+		},
+	}
+	return envFrom
+}
 
-// func (builder *DeploymentBuild) podTemplateSpec(name, tag string, deployStack *unstructured.Unstructured) corev1.PodTemplateSpec {
-// 	var (
-// 		namespace       string
-// 		image           string
-// 		registrySecret  string
-// 		ports           []corev1.ContainerPort
-// 		resources       corev1.ResourceRequirements
-// 		imagePullPolicy corev1.PullPolicy
-// 	)
-// 	var (
-// 		configSuffix string = "config"
-// 		// prefixSuffix string = "config"
-// 	)
-
-// 	namespace = builder.Instance.Spec.Namespace
-// 	env := envVarObject(namespace, name)
-// 	envFrom := envVarFrom()
-// 	requestMem, limitMem := stringsSplit(builder.Instance.Spec.ResourcesMemoryForDefault)
-// 	requestCpu, limitCpu := stringsSplit(builder.Instance.Spec.ResourcesCpuForDefault)
-// 	defaultResources := corev1.ResourceRequirements{
-// 		Requests: corev1.ResourceList{
-// 			"memory": resource.MustParse(requestMem),
-// 			"cpu":    resource.MustParse(requestCpu),
-// 		},
-// 		Limits: corev1.ResourceList{
-// 			"memory": resource.MustParse(limitMem),
-// 			"cpu":    resource.MustParse(limitCpu),
-// 		},
-// 	}
-// 	affinity := corev1.Affinity{
-// 		PodAntiAffinity: &corev1.PodAntiAffinity{
-// 			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-// 				{
-// 					Weight: 100,
-// 					PodAffinityTerm: corev1.PodAffinityTerm{
-// 						LabelSelector: &metav1.LabelSelector{
-// 							MatchExpressions: []metav1.LabelSelectorRequirement{
-// 								{
-// 									Key:      "app",
-// 									Operator: "In",
-// 									Values:   []string{name},
-// 								},
-// 							},
-// 						},
-// 						TopologyKey: "kubernetes.io/hostname",
-// 					},
-// 				},
-// 			},
-// 		},
-// 	}
-// 	// var objMap map[string]interface{}
-// 	// var deployment appsv1.Deployment
-// 	// crdUnstructured, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(&deployment)
-// 	// fmt.Println(crdUnstructured)
-// 	// _ = runtime.DefaultUnstructuredConverter.FromUnstructured(deployStack.Object, &objMap)
-// 	// fmt.Printf("Type:%T,objMap:%v", objMap["spec"], objMap) .(map[string]interface{})
-
-// 	// if spec, ok := deployStack.Object["spec"]; ok {
-// 	// 	if appList,ok :=
-// 	// 	if volumeCmForConf, ok := spec.(map[string]interface{})["volumeCmForConf"]; ok {
-// 	// 		fmt.Println(volumeCmForConf)
-// 	// 	}
-// 	// }
-
-// 	volumeCmForData, _, _ := unstructured.NestedString(deployStack.Object, "spec", "volumeCmForData")
-// 	volumes := []corev1.Volume{
-// 		{
-// 			Name: fmt.Sprintf("%s-%s", name, configSuffix),
-// 			VolumeSource: corev1.VolumeSource{
-// 				ConfigMap: &corev1.ConfigMapVolumeSource{
-// 					LocalObjectReference: corev1.LocalObjectReference{
-// 						Name: name,
-// 					},
-// 				},
-// 			},
-// 		},
-// 	}
-// 	volumeMounts := []corev1.VolumeMount{
-// 		{Name: fmt.Sprintf("%s-%s", name, configSuffix), MountPath: volumeCmForData},
-// 	}
-// 	lifecycle := corev1.Lifecycle{
-// 		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
-// 			Command: []string{"/bin/sh", "-c", "sleep 20"},
-// 		}}}
-// 	var (
-// 		livenessProbe  corev1.Probe
-// 		readinessProbe corev1.Probe
-// 	)
-// 	probeReadyTcpPort := builder.Instance.Spec.ProbeReadyTcpPort
-// 	probeReadyHttpPort := builder.Instance.Spec.ProbeReadyHttpPort
-
-// 	livenessProbe = corev1.Probe{
-// 		ProbeHandler: corev1.ProbeHandler{
-// 			TCPSocket: &corev1.TCPSocketAction{
-// 				// Port: intstr.IntOrString{Type: intstr.Int, IntVal: probeTcpPort},
-// 				Port: intstr.FromInt(probeReadyTcpPort),
-// 			},
-// 		},
-// 		InitialDelaySeconds: 30,
-// 		TimeoutSeconds:      5,
-// 	}
-// 	readinessProbe = corev1.Probe{
-// 		ProbeHandler: corev1.ProbeHandler{
-// 			TCPSocket: &corev1.TCPSocketAction{
-// 				Port: intstr.FromInt(probeReadyTcpPort),
-// 			},
-// 		},
-// 		InitialDelaySeconds: 15,
-// 		TimeoutSeconds:      5,
-// 	}
-// 	if builder.Instance.Spec.ProbeReadyForHttp {
-// 		livenessProbe = corev1.Probe{
-// 			ProbeHandler: corev1.ProbeHandler{
-// 				HTTPGet: &corev1.HTTPGetAction{
-// 					Path: "/ops/alive",
-// 					Port: intstr.FromInt(probeReadyHttpPort),
-// 				},
-// 			},
-// 			InitialDelaySeconds: 30,
-// 			TimeoutSeconds:      5,
-// 		}
-// 		readinessProbe = corev1.Probe{
-// 			ProbeHandler: corev1.ProbeHandler{
-// 				HTTPGet: &corev1.HTTPGetAction{
-// 					Path: "/ops/alive",
-// 					Port: intstr.FromInt(probeReadyHttpPort),
-// 				},
-// 			},
-// 			InitialDelaySeconds: 15,
-// 			TimeoutSeconds:      5,
-// 		}
-// 	}
-// 	//image
-// 	if tag == defaultTag {
-// 		imagePullPolicy = "Always"
-// 	} else {
-// 		imagePullPolicy = defaultImagePullPolicy
-// 	}
-// 	//registry secret
-// 	if builder.Instance.Spec.RegistrySecrets != "" {
-// 		registrySecret = builder.Instance.Spec.RegistrySecrets
-// 	} else {
-// 		registrySecret = defaultImagePullSecrets
-// 	}
-// 	//container port
-// 	if builder.Instance.Spec.Ports != nil {
-// 		ports = builder.containerPorts(name, builder.Instance.Spec.Ports)
-// 	} else {
-// 		if builder.Instance.Spec.PortForGrpc != 0 {
-// 			ports = []corev1.ContainerPort{{
-// 				Name:          StringCombin("grpc", "-", name),
-// 				ContainerPort: builder.Instance.Spec.PortForGrpc,
-// 			}}
-// 		}
-// 	}
-// 	// image = "registry.cn-hangzhou.aliyuncs.com/unipal/"
-// 	image = fmt.Sprintf("registry.cn-hangzhou.aliyuncs.com/unipal/%s_%s:%s", namespace, name, tag)
-
-// 	if builder.Instance.Spec.Resources != nil {
-// 		resources = *builder.Instance.Spec.Resources
-// 	} else {
-// 		resources = defaultResources
-// 	}
-
-// 	appsName := builder.Instance.Spec.Apps
-// 	if apps, ok := appsName[name]; ok {
-// 		if apps.RegistrySecrets != "" {
-// 			registrySecret = apps.RegistrySecrets
-// 		}
-// 		if apps.Ports != nil {
-// 			ports = append(ports, builder.containerPorts(name, apps.Ports)...)
-// 		}
-// 		// resources = defaultResources
-// 		//
-// 	}
-
-// 	podTemplateSpec := corev1.PodTemplateSpec{
-// 		ObjectMeta: metav1.ObjectMeta{
-// 			Annotations: map[string]string{},
-// 			Labels:      LabelsSelector(name, namespace),
-// 		},
-// 		Spec: corev1.PodSpec{
-// 			NodeSelector: map[string]string{},
-// 			Affinity:     &affinity,
-// 			Containers: []corev1.Container{{
-// 				Name:            name,
-// 				Image:           image,
-// 				ImagePullPolicy: imagePullPolicy,
-// 				// Command:         command,
-// 				// Args:            args,
-// 				Ports:          ports,
-// 				Resources:      resources,
-// 				Env:            env,
-// 				EnvFrom:        envFrom,
-// 				VolumeMounts:   volumeMounts,
-// 				LivenessProbe:  &livenessProbe,
-// 				ReadinessProbe: &readinessProbe,
-// 				Lifecycle:      &lifecycle,
-// 			}},
-// 			TerminationGracePeriodSeconds: int64Ptr(30),
-// 			Volumes:                       volumes,
-// 			ImagePullSecrets: []corev1.LocalObjectReference{{
-// 				Name: registrySecret,
-// 			}},
-// 		},
-// 	}
-
-// 	return podTemplateSpec
-// }
-
-// func (builder *DeploymentBuild) containerVolumeMounts(name string, obj []client.Object) []corev1.VolumeMount {
-// 	var volumeMounts []corev1.VolumeMount
-// 	// containerPorts := builder.Instance.Spec.Ports
-// 	for _, containerPort := range volumeMounts {
-// 		ports = append(ports, corev1.ContainerPort{
-// 			Name:          stringCombin(containerPort.Name, "-", name),
-// 			ContainerPort: containerPort.Port,
-// 		})
-// 	}
-
-//		return volumeMounts
-//	}
-
-// func envVarObject(namespace, name string) []corev1.EnvVar {
-// 	env := []corev1.EnvVar{
-// 		{Name: "CONFIG_ENV", Value: namespace},
-// 		{Name: "MY_SERVICE_NAME", Value: name},
-// 	}
-// 	return env
-// }
-// func envVarFrom() []corev1.EnvFromSource {
-// 	envFrom := []corev1.EnvFromSource{
-// 		{
-// 			ConfigMapRef: &corev1.ConfigMapEnvSource{
-// 				LocalObjectReference: corev1.LocalObjectReference{
-// 					Name: "global-config",
-// 				}},
-// 		},
-// 		{
-// 			SecretRef: &corev1.SecretEnvSource{
-// 				LocalObjectReference: corev1.LocalObjectReference{
-// 					Name: "global-secret"}},
-// 		},
-// 	}
-// 	return envFrom
-// }
-
-// 字符串切割
 func stringsSplit(name string) (request string, limit string) {
 	trimmed := strings.TrimSpace(name)
 	str := strings.Split(trimmed, "-")
@@ -650,40 +422,6 @@ func stringsSplit(name string) (request string, limit string) {
 	}
 	return request, limit
 }
-
-// func (builder *DeploymentBuild) getAppConf(name string, deployStack *unstructured.Unstructured) (map[string][]string, error) {
-// 	var appConf = make(map[string][]string)
-// 	// var appValue = make(map[string][]string)
-// 	var confValue = []string{}
-// 	// var appType string
-// 	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
-// 	if !ok {
-// 		return nil, fmt.Errorf("deployStack.Object is error")
-// 	}
-// 	defaultForConfig := builder.Instance.Spec.Default
-
-// 	appsConf := builder.Instance.Spec.AppsConf
-// 	for appType, appValue := range appsConf {
-// 		// fmt.Printf("appType:%v,appValue:%v\n", appType, appValue)
-// 		if value, ok := appValue[name]; ok {
-// 			if keys, ok := deployStackSpec[appType]; ok {
-// 				for _, key := range keys.([]interface{}) {
-// 					confValue = append(confValue, key.(string))
-// 				}
-// 			}
-// 			confValue = append(confValue, value...)
-// 			appConf[name] = uniqueStrings(confValue)
-// 		}
-// 	}
-// 	if len(confValue) == 0 {
-// 		appConf[name] = uniqueStrings(defaultForConfig)
-// 	}
-// 	// fmt.Printf("appType:%v,appConf:%v\n", appType, appConf)
-// 	//自定义服务配置：type：web、app、name
-// 	return appConf, nil
-// }
-
-// type:
 
 func uniqueStrings(confValue []string) []string {
 	uniqueMap := make(map[string]bool)
@@ -697,10 +435,8 @@ func uniqueStrings(confValue []string) []string {
 	return uniqueConfValue
 }
 
-// 定义一个函数，返回服务的配置
 func (builder *DeploymentBuild) getAppConf(name string, deployStack *unstructured.Unstructured) (map[string]map[string]interface{}, error) {
 	var appConf = make(map[string]map[string]interface{})
-	// var confValue = []string{}
 	var confMap = make(map[string]interface{})
 	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
 	if !ok {
@@ -730,6 +466,13 @@ func (builder *DeploymentBuild) getAppConf(name string, deployStack *unstructure
 					if _, ok := deployStackSpec[key.(string)]; ok {
 						confMap[key.(string)] = deployStackSpec[key.(string)]
 					}
+					k, value := getConfKeyValue(key.(string))
+					if value != nil {
+						confMap[k] = value
+					}
+					if strings.HasSuffix(strings.TrimSpace(key.(string)), strings.Title(appType)) {
+						delete(confMap, strings.Replace(key.(string), strings.Title(appType), "Default", 1))
+					}
 				}
 			}
 			//自定义服务配置项
@@ -741,7 +484,12 @@ func (builder *DeploymentBuild) getAppConf(name string, deployStack *unstructure
 				if value != nil {
 					confMap[k] = value
 				}
-
+				if strings.HasSuffix(strings.TrimSpace(key), strings.Title(name)) {
+					delete(confMap, strings.Replace(key, strings.Title(name), strings.Title(appType), 1))
+				}
+				if strings.HasSuffix(strings.TrimSpace(key), strings.Title(appType)) {
+					delete(confMap, strings.Replace(key, strings.Title(appType), "Default", 1))
+				}
 			}
 			appConf[name] = confMap
 
@@ -751,60 +499,59 @@ func (builder *DeploymentBuild) getAppConf(name string, deployStack *unstructure
 	return appConf, nil
 }
 
-// 获取配置
-func (builder *DeploymentBuild) getDefaultConf(confValue []string, confDefault, deployStackSpec map[string]interface{}) (map[string]interface{}, error) {
-	// var confDefault = make(map[string]interface{})
-	// deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
-	// if !ok {
-	// 	return nil, fmt.Errorf("deployStack.Object is error")
-	// }
-	for _, key := range confValue {
-		switch key {
-		case "replicasForDefault":
-			value, ok := deployStackSpec[key].(int64)
-			if !ok {
-				return nil, fmt.Errorf("%v Error", key)
-			}
-			confDefault[key] = value
-		case "resourcesMemoryForDefault":
-			value, ok := deployStackSpec[key].(string)
-			if !ok {
-				return nil, fmt.Errorf("%v Error", key)
-			}
-			confDefault[key] = value
+// func (builder *DeploymentBuild) getDefaultConf(confValue []string, confDefault, deployStackSpec map[string]interface{}) (map[string]interface{}, error) {
+// 	// var confDefault = make(map[string]interface{})
+// 	// deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
+// 	// if !ok {
+// 	// 	return nil, fmt.Errorf("deployStack.Object is error")
+// 	// }
+// 	for _, key := range confValue {
+// 		switch key {
+// 		case "replicasForDefault":
+// 			value, ok := deployStackSpec[key].(int64)
+// 			if !ok {
+// 				return nil, fmt.Errorf("%v Error", key)
+// 			}
+// 			confDefault[key] = value
+// 		case "resourcesMemoryForDefault":
+// 			value, ok := deployStackSpec[key].(string)
+// 			if !ok {
+// 				return nil, fmt.Errorf("%v Error", key)
+// 			}
+// 			confDefault[key] = value
 
-		case "resourcesCpuForDefault":
-			value, ok := deployStackSpec[key].(string)
-			if !ok {
-				return nil, fmt.Errorf("%v Error", key)
-			}
-			confDefault[key] = value
+// 		case "resourcesCpuForDefault":
+// 			value, ok := deployStackSpec[key].(string)
+// 			if !ok {
+// 				return nil, fmt.Errorf("%v Error", key)
+// 			}
+// 			confDefault[key] = value
 
-		case "imageRegistryForDefault":
-			value, ok := deployStackSpec[key].(string)
-			if !ok {
-				return nil, fmt.Errorf("%v Error", key)
-			}
-			confDefault[key] = value
+// 		case "imageRegistryForDefault":
+// 			value, ok := deployStackSpec[key].(string)
+// 			if !ok {
+// 				return nil, fmt.Errorf("%v Error", key)
+// 			}
+// 			confDefault[key] = value
 
-		case "imageSecretsForDefault":
-			value, ok := deployStackSpec[key].(string)
-			if !ok {
-				return nil, fmt.Errorf("%v Error", key)
-			}
-			confDefault[key] = value
+// 		case "imageSecretsForDefault":
+// 			value, ok := deployStackSpec[key].(string)
+// 			if !ok {
+// 				return nil, fmt.Errorf("%v Error", key)
+// 			}
+// 			confDefault[key] = value
 
-		case "imageNamespaceForDefault":
-			value, ok := deployStackSpec[key].(string)
-			if !ok {
-				return nil, fmt.Errorf("%v Error", key)
-			}
-			confDefault[key] = value
-		default:
-		}
-	}
-	return confDefault, nil
-}
+// 		case "imageNamespaceForDefault":
+// 			value, ok := deployStackSpec[key].(string)
+// 			if !ok {
+// 				return nil, fmt.Errorf("%v Error", key)
+// 			}
+// 			confDefault[key] = value
+// 		default:
+// 		}
+// 	}
+// 	return confDefault, nil
+// }
 
 // 字符串后缀是否为Default,自定义服务配置处理
 func getConfKeyValue(conf string) (string, interface{}) {
@@ -827,4 +574,84 @@ func getConfKeyValue(conf string) (string, interface{}) {
 		value = str[1:]
 	}
 	return key, value
+}
+
+func volumeSourceForSuffix(key string) (string, string) {
+	var volumeSource string
+	trimStr := strings.TrimSpace(key)
+	str := strings.Split(trimStr, "For")
+	prefix := str[0]
+	suffix := strings.ToLower(str[1])
+	if strings.Contains(trimStr, prefix) {
+		switch prefix {
+		case "volumeCm":
+			volumeSource = "ConfigMap"
+		case "volumeSecret":
+			volumeSource = "Secret"
+		default:
+			volumeSource = "ConfigMap"
+		}
+		if suffix == "default" {
+			suffix = "conf"
+		}
+		return suffix, volumeSource
+	} else {
+		suffix = "conf"
+		volumeSource = "ConfigMap"
+	}
+	return suffix, volumeSource
+
+}
+func containerVolumes(name, configSuffix, volumeSource string) []corev1.Volume {
+	var volumes []corev1.Volume
+	switch volumeSource {
+	case "ConfigMap":
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("%s-%s", name, configSuffix),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: name,
+					},
+				},
+			},
+		})
+	case "Secret":
+		volumes = append(volumes, corev1.Volume{
+
+			Name: fmt.Sprintf("%s-%s", name, configSuffix),
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: fmt.Sprintf("%s-%s", name, configSuffix),
+				},
+			},
+		})
+	default:
+	}
+
+	return volumes
+}
+func containerVolumeMounts(name, configSuffix, path string) []corev1.VolumeMount {
+	var volumeMounts []corev1.VolumeMount
+	volumeMounts = append(volumeMounts, []corev1.VolumeMount{
+		{Name: fmt.Sprintf("%s-%s", name, configSuffix), MountPath: path},
+	}...)
+
+	return volumeMounts
+}
+
+// 判断配置keyName是否是默认,还是自定义
+func getKeySuffixName(key string) string {
+	var (
+		name string
+	)
+	trimStr := strings.TrimSpace(key)
+	if strings.HasSuffix(trimStr, "Default") {
+
+	}
+	str := strings.Split(trimStr, "For")
+	if len(str) == 2 {
+		name = strings.ToLower(str[1])
+	}
+	return name
 }

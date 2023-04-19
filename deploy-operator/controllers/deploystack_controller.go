@@ -89,7 +89,7 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	resourceBuilder := resource.DeployStackBuild{Instance: deployStackInstance, Scheme: r.Scheme}
 
 	appList := deployStackInstance.Spec.AppsList
-	namespace := deployStackInstance.Spec.Namespace
+	namespace := "prod"
 	if appList == nil {
 		// appList = map[string]string{"test": "latest"}
 		return ctrl.Result{}, nil
