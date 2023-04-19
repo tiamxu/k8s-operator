@@ -1,32 +1,22 @@
 package resource
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	apiv1 "github.com/tiamxu/k8s-operator/deploy-operator/api/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	portForGrpcDefault int32 = 5010
-	portForHttpDefault int32 = 8800
 )
 
 type DeployStackBuild struct {
 	Instance *apiv1.DeployStack
 	Scheme   *runtime.Scheme
 }
-type ContainerPorts = apiv1.DefaultPorts
-type ServicePorts = apiv1.DefaultPorts
 
 type ResourceBuilder interface {
-	Build(name, tag string, deployStack *unstructured.Unstructured) (client.Object, error)
+	Build(name, tag string, deployStack *unstructured.Unstructured, d DeployStackBuild) (client.Object, error)
 	// Update(object client.Object, name, tag string, deployStack *unstructured.Unstructured) (client.Object, error)
 	// ExecStrategy() bool
 	GetObjectKind() (client.Object, error)
@@ -37,24 +27,12 @@ type labels map[string]string
 func (builder *DeployStackBuild) ResourceBuilds() []ResourceBuilder {
 	builders := []ResourceBuilder{
 		builder.Deployment(),
-		// builder.Service(),
+		builder.Service(),
 		// builder.ConfigMap(),
 		// builder.Secret(),
 		// builder.Ingress(),
 	}
 	return builders
-}
-
-func GetUnstructObject(ctx context.Context) (*unstructured.Unstructured, error) {
-	deployStack := &unstructured.Unstructured{}
-	deployStack.SetGroupVersionKind(schema.GroupVersionKind{Group: "gopron.online", Kind: "DeployStack", Version: "v1"})
-	var client client.Client
-	var namespaceName types.NamespacedName
-	if err := client.Get(ctx, namespaceName, deployStack); err != nil {
-		return deployStack, err
-	}
-	// deployStackSpec := deployStack.Object["spec"]
-	return deployStack, nil
 }
 
 func int64Ptr(i int64) *int64 { return &i }
@@ -95,4 +73,68 @@ func StringsSplit(name string) (request string, limit string) {
 		limit = str[1]
 	}
 	return request, limit
+}
+
+func GetAppConf(name string, deployStack *unstructured.Unstructured, builder DeployStackBuild) (map[string]map[string]interface{}, error) {
+	var appConf = make(map[string]map[string]interface{})
+	var confMap = make(map[string]interface{})
+	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("deployStack.Object is error")
+	}
+	defaultForConfig := builder.Instance.Spec.Default
+	if len(defaultForConfig) == 0 || defaultForConfig == nil {
+		return nil, fmt.Errorf("defaultForConfig error,not values or nil")
+	}
+	//默认配置项
+	for _, key := range defaultForConfig {
+		if _, ok := deployStackSpec[key]; ok {
+			confMap[key] = deployStackSpec[key]
+		}
+	}
+	appsConf := builder.Instance.Spec.AppsConf
+	if len(appsConf) == 0 {
+		return nil, fmt.Errorf("appsConf error,not values")
+	}
+	for appType, appValue := range appsConf {
+		if appTypeConf, ok := appValue[name]; ok {
+			//自定义服务配置：type：web、app
+			if keys, ok := deployStackSpec[appType]; ok {
+				for _, key := range keys.([]interface{}) {
+					// confValue = append(confValue, key.(string))
+					//分类配置项
+					if _, ok := deployStackSpec[key.(string)]; ok {
+						confMap[key.(string)] = deployStackSpec[key.(string)]
+					}
+					k, value := getConfKeyValue(key.(string))
+					if value != nil {
+						confMap[k] = value
+					}
+					if strings.HasSuffix(strings.TrimSpace(key.(string)), strings.Title(appType)) {
+						delete(confMap, strings.Replace(key.(string), strings.Title(appType), "Default", 1))
+					}
+				}
+			}
+			//自定义服务配置项
+			for _, key := range appTypeConf {
+				if _, ok := deployStackSpec[key]; ok {
+					confMap[key] = deployStackSpec[key]
+				}
+				k, value := getConfKeyValue(key)
+				if value != nil {
+					confMap[k] = value
+				}
+				if strings.HasSuffix(strings.TrimSpace(key), strings.Title(name)) {
+					delete(confMap, strings.Replace(key, strings.Title(name), strings.Title(appType), 1))
+				}
+				if strings.HasSuffix(strings.TrimSpace(key), strings.Title(appType)) {
+					delete(confMap, strings.Replace(key, strings.Title(appType), "Default", 1))
+				}
+			}
+			appConf[name] = confMap
+
+		}
+	}
+
+	return appConf, nil
 }

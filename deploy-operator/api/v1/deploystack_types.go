@@ -12,29 +12,14 @@ import (
 // DeployStackSpec defines the desired state of DeployStack
 // +kubebuilder:pruning:PreserveUnknownFields
 type DeployStackSpec struct {
-	// Apps     map[string]AppsName `json:"apps,omitempty"`
 	AppsList map[string]string              `json:"appsList,omitempty"`
 	AppsConf map[string]map[string][]string `json:"appsConf,omitempty"`
-	// Replicas        *int32                       `json:"replicas,omitempty"`
-	// ImageRegistry   string                       `json:"imageRegistry,omitempty"`
-	// RegistrySecrets string                       `json:"registrySecrets,omitempty"`
-	Namespace string                 `json:"namespace,omitempty"`
-	Service   DeployStackServiceSpec `json:"service,omitempty"`
-	// Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
-	// +kubebuilder:pruning:PreserveUnknownFields
-	Default     []string          `json:"default,omitempty"`
-	Ports       []DefaultPorts    `json:"ports,omitempty"`
-	Configs     map[string]string `json:"configs,omitempty"`
-	Secret      map[string]string `json:"secret,omitempty"`
-	Ingress     []IngressSpec     `json:"ingress,omitempty"`
-	PortForGrpc int32             `json:"portForGrpc,omitempty"`
-	PortForHttp int32             `json:"portForHttp,omitempty"`
-	// ResourcesMemoryForDefault string            `json:"resourcesMemoryForDefault,omitempty"`
-	// ResourcesCpuForDefault    string            `json:"resourcesCpuForDefault,omitempty"`
-	ProbeReadyTcpPort  int  `json:"probeReadyTcpPort,omitempty"`
-	ProbeReadyHttpPort int  `json:"probeReadyHttpPort,omitempty"`
-	ProbeReadyForHttp  bool `json:"probeReadyForHttp,omitempty"`
-	// ReplicasForDefault        *int32            `json:"replicasForDefault,omitempty"`
+
+	Namespace string            `json:"namespace,omitempty"`
+	Default   []string          `json:"default,omitempty"`
+	Configs   map[string]string `json:"configs,omitempty"`
+	Secret    map[string]string `json:"secret,omitempty"`
+	Ingress   []IngressSpec     `json:"ingress,omitempty"`
 }
 
 type IngressSpec struct {

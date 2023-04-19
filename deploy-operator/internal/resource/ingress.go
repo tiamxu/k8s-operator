@@ -79,7 +79,7 @@ func (builder *IngressBuild) stringsSplit(name string) (string, int32) {
 		port32 = int32(port)
 	} else if len(str) == 1 {
 		svcName = str[0]
-		port32 = builder.Instance.Spec.PortForHttp
+		port32 = 80
 	}
 
 	return svcName, port32
@@ -189,14 +189,4 @@ func (builder *IngressBuild) getAnnotations(name string) map[string]string {
 		}
 	}
 	return annotations
-}
-func (builder *IngressBuild) Update(object client.Object, name, tag string) (client.Object, error) {
-	ingress := object.(*v1.Ingress)
-	if builder.ingressRules(name) != nil {
-		ingress.Spec.Rules = builder.ingressRules(name)
-		ingress.Spec.TLS = builder.tlsStrategy(name)
-		ingress.ObjectMeta.Annotations = builder.getAnnotations(name)
-
-	}
-	return ingress, nil
 }

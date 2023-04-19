@@ -63,6 +63,7 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// 	}
 
 	// }
+	namespace := deployStack.Object["spec"].(map[string]interface{})["namespaceForDefault"].(string)
 
 	deployStackInstance, err := r.getDeployStack(ctx, req.NamespacedName)
 	if err != nil {
@@ -87,9 +88,8 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	//声明并初始化一个DeployStackBuild的结构体变量
 	// deploymentBuilder = resource.DeployStackBuild{Instance: deployStackInstance, Scheme: r.Scheme}
 	resourceBuilder := resource.DeployStackBuild{Instance: deployStackInstance, Scheme: r.Scheme}
-
 	appList := deployStackInstance.Spec.AppsList
-	namespace := "prod"
+
 	if appList == nil {
 		// appList = map[string]string{"test": "latest"}
 		return ctrl.Result{}, nil
@@ -103,7 +103,6 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if resources, err = builder.GetObjectKind(); err != nil {
 				return ctrl.Result{}, err
 			}
-
 			if _, ok := resources.(*corev1.ConfigMap); ok {
 				fondResourceName = "global-config"
 
@@ -139,7 +138,7 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if errors.IsNotFound(err) {
 				logger.Info("NotFound Resource for DeployStack, Create one", "Name", fondResourceName, "Kind", reflect.TypeOf(resourceObj))
 				//Create Resource
-				if resourceObj, err = builder.Build(name, tag, deployStack); err != nil {
+				if resourceObj, err = builder.Build(name, tag, deployStack, resourceBuilder); err != nil {
 					return ctrl.Result{}, err
 				}
 				if err := r.Client.Create(ctx, resourceObj); err != nil {
@@ -155,7 +154,7 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				// 	return ctrl.Result{}, err
 				// }
 
-				if newResourceObj, err = builder.Build(name, tag, deployStack); err != nil {
+				if newResourceObj, err = builder.Build(name, tag, deployStack, resourceBuilder); err != nil {
 					return ctrl.Result{}, err
 				}
 				// if !reflect.DeepEqual(newResourceObj, currentResourceObj) {
@@ -314,8 +313,8 @@ func (r *DeployStackReconciler) getResourceObj(ctx context.Context, namespace, n
 func (r *DeployStackReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.DeployStack{}).
-		// Owns(&appsv1.Deployment{}).
-		// Owns(&corev1.Service{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		// Owns(&corev1.ConfigMap{}).
 		// Owns(&corev1.Secret{}).
 		// Owns(&v1.Ingress{}).

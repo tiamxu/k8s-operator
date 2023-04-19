@@ -26,21 +26,22 @@ spec:
       - probeHttpEnable:false
     app:
       hello:
-      - replicasForDefault
+      - portForHttp
       - resourcesCpuForDefault
       - volumeCmForDefault:/www/conf
       - volumeSecretForCerts
   #以下按服务类定义配置:web、go、node、java等
   #前端类
   web:
-  - replicasForDefault
+  - portForHttp
   - replicasForWeb
   #后端类
   app:
+  - portForGrpc
   - resourcesMemoryForDefault
   #..其他类
    #默认通用配置项
-   #portFor 定义端口
+   #portFor 定义端口,格式:portFor+自定义名字
    #resource 资源限制
    #image 定义镜像
    #volume定义挂载卷配置:支持格式：volume+挂载类型+For+自定义名字,如volumeCmForConf：定义服务配置文件
@@ -57,7 +58,6 @@ spec:
   - imageNamespaceForDefault
   - namespaceForDefault
   - volumeCmForDefault
-  - portGrpcForDefault
   - probeReadyTcpForDefault
 
 
@@ -95,8 +95,6 @@ spec:
   resourcesCpuForDefault: 10m-100m
 
   #port
-  portHttpForDefault: 8080
-  portGrpcForDefault: 5010
   portForGrpc: 5011
   portForHttp: 8080
   #volume

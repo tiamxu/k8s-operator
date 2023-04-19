@@ -1,8 +1,12 @@
 package resource
 
 import (
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -22,16 +26,38 @@ func (builder *ServiceBuild) GetObjectKind() (client.Object, error) {
 	return &corev1.Service{}, nil
 }
 
-func (builder *ServiceBuild) Build(name, tag string) (client.Object, error) {
-	//container port
-	var ports []corev1.ServicePort
-	defaultPorts := []corev1.ServicePort{{
-		Name: StringCombin("grpc", "-", name),
-		Port: portForGrpcDefault,
-	}}
-	namespace := builder.Instance.Spec.Namespace
+func (builder *ServiceBuild) Build(name, tag string, deployStack *unstructured.Unstructured, d DeployStackBuild) (client.Object, error) {
 
-	ports = defaultPorts
+	var (
+		namespace string
+		ports     []corev1.ServicePort
+	)
+	appsConfObj, err := GetAppConf(name, deployStack, d)
+	if err != nil {
+		return nil, err
+	}
+	appConf, ok := appsConfObj[name]
+	if !ok {
+		return nil, fmt.Errorf("Service appConf error:%v", appConf)
+	}
+	for key, valueConf := range appConf {
+		switch key {
+		case "namespaceForDefault":
+			value, ok := valueConf.(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			namespace = value
+		case "portForGrpc", "portForHttp":
+			value, ok := valueConf.(int64)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			ports = append(ports, servicePorts(name, key, int32(value))...)
+
+		default:
+		}
+	}
 	service := corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Service",
@@ -44,38 +70,20 @@ func (builder *ServiceBuild) Build(name, tag string) (client.Object, error) {
 		Spec: corev1.ServiceSpec{
 			Selector: LabelsSelector(name, namespace),
 			Ports:    ports,
-			Type:     builder.Instance.Spec.Service.Type,
+			Type:     corev1.ServiceTypeClusterIP,
 		},
 	}
 	return &service, nil
 }
 
-func (builder *ServiceBuild) servicePorts(name string, servicePorts []ServicePorts) []corev1.ServicePort {
+func servicePorts(name, key string, port int32) []corev1.ServicePort {
 	var ports []corev1.ServicePort
-	// servicePorts := builder.Instance.Spec.Ports
-	for _, svcPort := range servicePorts {
-		ports = append(ports, corev1.ServicePort{
-			Name: StringCombin(svcPort.Name, "-", name),
-			Port: svcPort.Port,
-		})
-	}
+	trimStr := strings.TrimSpace(key)
+	str := strings.Split(trimStr, "For")
+	suffix := strings.ToLower(str[1])
+	ports = append(ports, corev1.ServicePort{
+		Name: fmt.Sprintf("%s-%s", suffix, name),
+		Port: port,
+	})
 	return ports
-}
-
-func (builder *ServiceBuild) Update(object client.Object, name, tag string) (client.Object, error) {
-	service := object.(*corev1.Service)
-	service.Labels = Labels(name, builder.Instance.Spec.Namespace)
-	service.Spec.Type = builder.Instance.Spec.Service.Type
-	if builder.Instance.Spec.Ports != nil {
-		service.Spec.Ports = builder.servicePorts(name, builder.Instance.Spec.Ports)
-	} else {
-		if builder.Instance.Spec.PortForGrpc != 0 {
-			service.Spec.Ports = []corev1.ServicePort{{
-				Name: StringCombin("grpc", "-", name),
-				Port: builder.Instance.Spec.PortForGrpc,
-			}}
-		}
-	}
-
-	return service, nil
 }

@@ -197,15 +197,9 @@ func (in *DeployStackSpec) DeepCopyInto(out *DeployStackSpec) {
 			(*out)[key] = outVal
 		}
 	}
-	in.Service.DeepCopyInto(&out.Service)
 	if in.Default != nil {
 		in, out := &in.Default, &out.Default
 		*out = make([]string, len(*in))
-		copy(*out, *in)
-	}
-	if in.Ports != nil {
-		in, out := &in.Ports, &out.Ports
-		*out = make([]DefaultPorts, len(*in))
 		copy(*out, *in)
 	}
 	if in.Configs != nil {

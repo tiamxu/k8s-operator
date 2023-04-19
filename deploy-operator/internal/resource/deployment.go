@@ -36,7 +36,7 @@ func (builder *DeploymentBuild) GetObjectKind() (client.Object, error) {
 	return &appsv1.Deployment{}, nil
 }
 
-func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructured.Unstructured) (client.Object, error) {
+func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructured.Unstructured, d DeployStackBuild) (client.Object, error) {
 	var (
 		namespace, image, registrySecret, imageNamespace string
 		replicas                                         *int32
@@ -61,7 +61,7 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 	// if !ok {
 	// 	return nil, fmt.Errorf("Not Found deployStack Spec")
 	// }
-	appsConfObj, err := builder.getAppConf(name, deployStack)
+	appsConfObj, err := GetAppConf(name, deployStack, d)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 	if !ok {
 		return nil, fmt.Errorf("appConf error:%v", appConf)
 	}
-	fmt.Printf("####appsConf:%v\n", appsConfObj)
+	// fmt.Printf("####appsConf:%v\n", appsConfObj)
 	for key, valueConf := range appConf {
 		fmt.Printf("####key:%v,type:%T, value:%v\n", key, valueConf, valueConf)
 		switch key {
@@ -135,16 +135,12 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 			volumes = append(volumes, containerVolumes(name, suffix, volumeSource)...)
 			volumeMounts = append(volumeMounts, containerVolumeMounts(name, suffix, volumesPath)...)
 
-		case "portGrpcForDefault":
+		case "portForGrpc", "portForHttp":
 			value, ok := valueConf.(int64)
 			if !ok {
 				return nil, fmt.Errorf("%v Error", key)
 			}
-			ports = []corev1.ContainerPort{{
-				Name:          StringCombin("grpc", "-", name),
-				ContainerPort: int32(value),
-			},
-			}
+			ports = append(ports, containerPorts(name, key, int32(value))...)
 		case "probeReadyTcpForDefault":
 			if value, ok := valueConf.(int64); ok {
 				probePort = int(value)
@@ -168,7 +164,6 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 				return nil, fmt.Errorf("%v Error", key)
 			}
 		default:
-
 		}
 	}
 	resources = corev1.ResourceRequirements{
@@ -221,23 +216,8 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 			},
 		},
 	}
-	//volume
 	// volumeCmForData, _, _ := unstructured.NestedString(deployStack.Object, "spec", "volumeCmForData")
-	// volumes := []corev1.Volume{
-	// 	{
-	// 		Name: fmt.Sprintf("%s-%s", name, configSuffix),
-	// 		VolumeSource: corev1.VolumeSource{
-	// 			ConfigMap: &corev1.ConfigMapVolumeSource{
-	// 				LocalObjectReference: corev1.LocalObjectReference{
-	// 					Name: name,
-	// 				},
-	// 			},
-	// 		},
-	// 	},
-	// }
-	// volumeMounts := []corev1.VolumeMount{
-	// 	{Name: fmt.Sprintf("%s-%s", name, configSuffix), MountPath: volumeCmForData},
-	// }
+
 	//check health
 	lifecycle := corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
@@ -341,52 +321,21 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 	return &deployment, nil
 }
 
-// func (builder *DeploymentBuild) Update(object client.Object, name, tag string, deployStack *unstructured.Unstructured) (client.Object, error) {
-// 	deploy := object.(*appsv1.Deployment)
-// 	if tag == "" {
-// 		tag = defaultTag
-// 	}
-// 	appsName := builder.Instance.Spec.Apps
-// 	if apps, ok := appsName[name]; ok {
-// 		//Replicas
-// 		if apps.Replicas != nil {
-// 			deploy.Spec.Replicas = apps.Replicas
-// 		} else {
-// 			deploy.Spec.Replicas = builder.Instance.Spec.Replicas
-// 		}
-// 		if apps.Namespace != "" {
-// 			deploy.Namespace = apps.Namespace
-// 		} else {
-// 			deploy.Namespace = builder.Instance.Spec.Namespace
-// 		}
-
-// 	} else {
-// 		deploy.Spec.Replicas = builder.Instance.Spec.Replicas
-// 		deploy.Namespace = builder.Instance.Spec.Namespace
-// 	}
-// 	//pod template
-// 	//标签字段不可变，不能更新
-// 	deploy.Labels = Labels(name, builder.Instance.Spec.Namespace)
-// 	// deploy.Spec.Selector = &metav1.LabelSelector{MatchLabels: LabelsSelector(name, builder.Instance.Spec.Namespace)}
-// 	deploy.Spec.Template = builder.podTemplateSpec(name, tag, deployStack)
-// 	return deploy, nil
-// }
-
 // func (builder *DeploymentBuild) ExecStrategy() bool {
 // 	return true
 // }
 
-// func (builder *DeploymentBuild) containerPorts(name string, containerPorts []ContainerPorts) []corev1.ContainerPort {
-// 	var ports []corev1.ContainerPort
-// 	for _, containerPort := range containerPorts {
-// 		ports = append(ports, corev1.ContainerPort{
-// 			Name:          StringCombin(containerPort.Name, "-", name),
-// 			ContainerPort: containerPort.Port,
-// 		})
-// 	}
-
-// 	return ports
-// }
+func containerPorts(name, key string, port int32) []corev1.ContainerPort {
+	var ports []corev1.ContainerPort
+	trimStr := strings.TrimSpace(key)
+	str := strings.Split(trimStr, "For")
+	suffix := strings.ToLower(str[1])
+	ports = append(ports, corev1.ContainerPort{
+		Name:          fmt.Sprintf("%s-%s", suffix, name),
+		ContainerPort: port,
+	})
+	return ports
+}
 
 func envVarObject(namespace, name string) []corev1.EnvVar {
 	env := []corev1.EnvVar{
