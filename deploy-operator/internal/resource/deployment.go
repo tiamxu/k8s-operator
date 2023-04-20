@@ -32,9 +32,26 @@ func (builder *DeployStackBuild) Deployment() *DeploymentBuild {
 
 	return &DeploymentBuild{builder}
 }
+
 func (builder *DeploymentBuild) GetObjectKind() (client.Object, error) {
 	return &appsv1.Deployment{}, nil
 }
+
+// func (builder *DeploymentBuild) GetObjectKind(name string, deployStack *unstructured.Unstructured, d DeployStackBuild) (schema.GroupVersionKind, error) {
+// 	_, serviceType, _ := GetAppConf(name, deployStack, d)
+// 	if serviceType == "sts" {
+// 		return schema.GroupVersionKind{
+// 			Group:   "apps",
+// 			Kind:    "StatefulSet",
+// 			Version: "v1",
+// 		}, nil
+// 	}
+// 	return schema.GroupVersionKind{
+// 		Group:   "apps",
+// 		Kind:    "Deployment",
+// 		Version: "v1",
+// 	}, nil
+// }
 
 func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructured.Unstructured, d DeployStackBuild) (client.Object, error) {
 	var (
@@ -67,11 +84,10 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 	}
 	appConf, ok := appsConfObj[name]
 	if !ok {
-		return nil, fmt.Errorf("appConf error:%v", appConf)
+		return nil, fmt.Errorf("deployment appConf error:%v", appConf)
 	}
-	// fmt.Printf("####appsConf:%v\n", appsConfObj)
 	for key, valueConf := range appConf {
-		fmt.Printf("####key:%v,type:%T, value:%v\n", key, valueConf, valueConf)
+		// fmt.Printf("####key:%v,type:%T, value:%v\n", key, valueConf, valueConf)
 		switch key {
 		case "replicasForDefault", "replicasForWeb", "replicasForApp", fmt.Sprintf("replicasFor%s", strings.Title(name)):
 			if value, ok := valueConf.(int64); ok {
@@ -177,7 +193,6 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 		},
 	}
 
-	// fmt.Printf("replicas:%v,namespace:%v,ports:%v,resources:%v\n", *replicas, namespace, ports, resources)
 	//image
 	image = fmt.Sprintf("%s/%s_%s:%s", image, imageNamespace, name, tag)
 	if image == "" {
@@ -321,6 +336,31 @@ func (builder *DeploymentBuild) Build(name, tag string, deployStack *unstructure
 		},
 	}
 
+	// sts := appsv1.StatefulSet{
+	// 	ObjectMeta: metav1.ObjectMeta{
+	// 		Name:      name,
+	// 		Namespace: namespace,
+	// 		Labels:    map[string]string{},
+	// 	},
+	// 	Spec: appsv1.StatefulSetSpec{
+	// 		ServiceName: name,
+	// 		Selector:    &metav1.LabelSelector{MatchLabels: LabelsSelector(name, namespace)},
+	// 		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+	// 			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+	// 			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+	// 				Partition: int32Ptr(0),
+	// 			},
+	// 		},
+	// 		Replicas: replicas,
+	// 		Template: podTemplateSpec,
+	// 	},
+	// }
+
+	// _, serviceType, _ := GetAppConf(name, deployStack, d)
+	// if serviceType == "sts" {
+	// 	return &sts, nil
+	// }
+
 	return &deployment, nil
 }
 
@@ -385,70 +425,6 @@ func uniqueStrings(confValue []string) []string {
 		uniqueConfValue = append(uniqueConfValue, k)
 	}
 	return uniqueConfValue
-}
-
-func (builder *DeploymentBuild) getAppConf(name string, deployStack *unstructured.Unstructured) (map[string]map[string]interface{}, error) {
-	var appConf = make(map[string]map[string]interface{})
-	var confMap = make(map[string]interface{})
-	deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("deployStack.Object is error")
-	}
-	defaultForConfig := builder.Instance.Spec.Default
-	if len(defaultForConfig) == 0 || defaultForConfig == nil {
-		return nil, fmt.Errorf("defaultForConfig error,not values or nil")
-	}
-	//默认配置项
-	for _, key := range defaultForConfig {
-		if _, ok := deployStackSpec[key]; ok {
-			confMap[key] = deployStackSpec[key]
-		}
-	}
-	appsConf := builder.Instance.Spec.AppsConf
-	if len(appsConf) == 0 {
-		return nil, fmt.Errorf("appsConf error,not values")
-	}
-	for appType, appValue := range appsConf {
-		if appTypeConf, ok := appValue[name]; ok {
-			//自定义服务配置：type：web、app
-			if keys, ok := deployStackSpec[appType]; ok {
-				for _, key := range keys.([]interface{}) {
-					// confValue = append(confValue, key.(string))
-					//分类配置项
-					if _, ok := deployStackSpec[key.(string)]; ok {
-						confMap[key.(string)] = deployStackSpec[key.(string)]
-					}
-					k, value := getConfKeyValue(key.(string))
-					if value != nil {
-						confMap[k] = value
-					}
-					if strings.HasSuffix(strings.TrimSpace(key.(string)), strings.Title(appType)) {
-						delete(confMap, strings.Replace(key.(string), strings.Title(appType), "Default", 1))
-					}
-				}
-			}
-			//自定义服务配置项
-			for _, key := range appTypeConf {
-				if _, ok := deployStackSpec[key]; ok {
-					confMap[key] = deployStackSpec[key]
-				}
-				k, value := getConfKeyValue(key)
-				if value != nil {
-					confMap[k] = value
-				}
-				if strings.HasSuffix(strings.TrimSpace(key), strings.Title(name)) {
-					delete(confMap, strings.Replace(key, strings.Title(name), strings.Title(appType), 1))
-				}
-				if strings.HasSuffix(strings.TrimSpace(key), strings.Title(appType)) {
-					delete(confMap, strings.Replace(key, strings.Title(appType), "Default", 1))
-				}
-			}
-			appConf[name] = confMap
-
-		}
-	}
-
-	return appConf, nil
 }
 
 // func (builder *DeploymentBuild) getDefaultConf(confValue []string, confDefault, deployStackSpec map[string]interface{}) (map[string]interface{}, error) {

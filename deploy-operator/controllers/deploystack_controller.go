@@ -2,8 +2,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -23,12 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// var (
-// 	// appList         map[string]string
-// 	// resourceBuilder resource.DeployStackBuild
-// 	resources client.Object
-// )
-
 type DeployStackReconciler struct {
 	client.Client
 	Log      logr.Logger
@@ -41,31 +33,21 @@ type DeployStackReconciler struct {
 //+kubebuilder:rbac:groups=gopron.online,resources=deploystacks/finalizers,verbs=update
 
 func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// ctx = context.Background()
 	logger := r.Log.WithValues("DeployStack", req.NamespacedName)
 	deployStack, err := r.GetUnstructObject(ctx, req.NamespacedName)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	deployStackSpec, err := json.Marshal(deployStack.Object["spec"])
-	if err != nil {
-		logger.Error(err, "Failed to marshal deployStackSpec yaml")
+	// deployStackSpec, err := json.Marshal(deployStack.Object["spec"])
+	// if err != nil {
+	// 	logger.Error(err, "Failed to marshal deployStackSpec yaml")
+	// }
+	// logger.V(1).Info("DeployStackKind", "deployStackSpec", string(deployStackSpec))
+
+	namespace, ok := deployStack.Object["spec"].(map[string]interface{})["namespaceForDefault"].(string)
+	if !ok {
+		namespace = "default"
 	}
-	logger.V(1).Info("DeployStackKind", "deployStackSpec", string(deployStackSpec))
-	// deployStackSpec, ok := deployStack.Object["spec"].(map[string]interface{})
-	// if ok {
-	// 	fmt.Println("deployStackSpec", deployStackSpec)
-	// }
-	// defaultConfig, ok := deployStackSpec["default"].([]string)
-	// if ok {
-	// 	fmt.Printf("####type:%T,defaultConfig:%v\n", defaultConfig, defaultConfig)
-	// 	for _, v := range defaultConf {
-	// 		fmt.Printf("v:%v\n", v)
-	// 	}
-
-	// }
-	namespace := deployStack.Object["spec"].(map[string]interface{})["namespaceForDefault"].(string)
-
 	deployStackInstance, err := r.getDeployStack(ctx, req.NamespacedName)
 	if err != nil {
 		// 如果资源不存在，则忽略
@@ -76,39 +58,41 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Error(err, "Failed to get DeployStack resource")
 		return ctrl.Result{}, err
 	}
-	logger.Info("Kind DeployStack Resource Normal...") //说明deploystack Kind已经创建
+	logger.Info("Kind DeployStack Resource Normal...")
 	logger.Info("Start reconciling")
-
-	//序列化depoystack 配置
-	instanceSpec, err := json.Marshal(deployStackInstance.Spec)
-	if err != nil {
-		logger.Error(err, "Failed to marshal cluster spec")
-	}
-	logger.V(1).Info("DeployStackInstance", "spec", string(instanceSpec))
 
 	//声明并初始化一个DeployStackBuild的结构体变量
 	// deploymentBuilder = resource.DeployStackBuild{Instance: deployStackInstance, Scheme: r.Scheme}
 	resourceBuilder := resource.DeployStackBuild{Instance: deployStackInstance, Scheme: r.Scheme}
-	appList := deployStackInstance.Spec.AppsList
 
+	appList := deployStackInstance.Spec.AppsList
+	// appList := deployStack.Object["spec"].(map[string]interface{})["appsList"].(map[string]interface{})
 	if appList == nil {
-		// appList = map[string]string{"test": "latest"}
 		return ctrl.Result{}, nil
 	}
 	for name, tag := range appList {
 		builders := resourceBuilder.ResourceBuilds()
 		fondResourceName := name
 		var resources client.Object
-		_, serviceType, _ := resource.GetAppConf(name, deployStack, resourceBuilder)
-		fmt.Printf("#name:%v,serviceType:%v\n", name, serviceType)
-		for _, builder := range builders {
-			//获取对于资源类型
+		_, serviceType, err := resource.GetAppConf(name, deployStack, resourceBuilder)
+		if err != nil {
+			return ctrl.Result{}, err
 
+		}
+		//定义unstructured 对象
+		// unstructResourceObj := &unstructured.Unstructured{}
+		for _, builder := range builders {
+
+			//获取对于资源类型
 			if resources, err = builder.GetObjectKind(); err != nil {
 				return ctrl.Result{}, err
 			}
 			if _, ok := resources.(*appsv1.Deployment); ok {
 				if serviceType == "sts" {
+					continue
+				}
+			} else if _, ok := resources.(*appsv1.StatefulSet); ok {
+				if serviceType != "sts" {
 					continue
 				}
 			} else if _, ok := resources.(*corev1.ConfigMap); ok {
@@ -117,10 +101,6 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			} else if _, ok := resources.(*corev1.Secret); ok {
 				fondResourceName = "global-secret"
 
-			} else if _, ok := resources.(*appsv1.StatefulSet); ok {
-				if serviceType != "sts" {
-					continue
-				}
 			} else if _, ok := resources.(*v1.Ingress); ok {
 				for _, ingress := range resourceBuilder.Instance.Spec.Ingress {
 					if ingress.Name == name {
@@ -135,12 +115,12 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			} else {
 				fondResourceName = name
 			}
-			//获取对于资源类型currentResourcesObj:= &appsv1.Deployment{}
-			// resourceObj, ok := r.getObjectKind(resources)
-			// if !ok {
-			// 	continue
+			// gvk, err := builder.GetObjectKind(name, deployStack, resourceBuilder)
+			// if err != nil {
+			// 	return ctrl.Result{}, err
 			// }
-			// logger.Info("Begin Fetch getResourceObj")
+			// unstructResourceObj.SetGroupVersionKind(gvk)
+
 			currentResourceObj, err := r.getResourceObj(ctx, namespace, fondResourceName, resources)
 			if client.IgnoreNotFound(err) != nil {
 				return ctrl.Result{}, err
@@ -162,34 +142,28 @@ func (r *DeployStackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				logger.Info("Kind  resource already", "Name", fondResourceName, "Kind", reflect.TypeOf(currentResourceObj))
 				// 如果资源对象存在，且需要更新，则更新
 				var newResourceObj client.Object
-				// if newResourceObj, err = builder.Update(currentResourceObj, name, tag, deployStack); err != nil {
-				// 	return ctrl.Result{}, err
-				// }
-
 				if newResourceObj, err = builder.Build(name, tag, deployStack, resourceBuilder); err != nil {
 					return ctrl.Result{}, err
 				}
-				// if !reflect.DeepEqual(newResourceObj, currentResourceObj) {
 				if err := r.Client.Update(ctx, newResourceObj); err != nil {
 					logger.Error(err, "Update Resource  Failed", "Name", fondResourceName, "Kind", reflect.TypeOf(newResourceObj))
 					return ctrl.Result{}, err
 				}
 				logger.Info("Kind Resource Updated", "Name", fondResourceName, "Kind", reflect.TypeOf(newResourceObj))
 				r.Recorder.Eventf(newResourceObj, corev1.EventTypeNormal, "Update", "Update Resource %T", newResourceObj)
-				// }
-
 			}
 		}
 		logger.Info("#####end分割线####", "Name", name)
 	}
-	//删除多余服务,通过资源标签过滤
-	if err := r.resourcesDelete(ctx, deployStackInstance); err != nil {
+	// 删除多余服务,通过资源标签过滤
+	if err := r.resourcesDelete(ctx, namespace, deployStackInstance); err != nil {
 		logger.Error(err, "Failed to Delete DeployStack resource")
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
 }
-func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, deployStack *apiv1.DeployStack) error {
+
+func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, namespace string, deployStack *apiv1.DeployStack) error {
 	resourceBuilder := resource.DeployStackBuild{Instance: deployStack, Scheme: r.Scheme}
 	builders := resourceBuilder.ResourceBuilds()
 	var (
@@ -197,7 +171,7 @@ func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, deployStack
 		resources client.Object
 	)
 	labelSelector := labels.SelectorFromSet(map[string]string{"app.kubernetes.io/name": "deploystack"})
-	listOps := &client.ListOptions{Namespace: deployStack.Spec.Namespace, LabelSelector: labelSelector}
+	listOps := &client.ListOptions{Namespace: namespace, LabelSelector: labelSelector}
 	for _, builder := range builders {
 		if resources, err = builder.GetObjectKind(); err != nil {
 			return err
@@ -211,6 +185,20 @@ func (r *DeployStackReconciler) resourcesDelete(ctx context.Context, deployStack
 			for _, resourceObj := range resourceObjList.Items {
 				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
 					//deployment no longer exists in the deploystack spec, so delete it
+					if err := r.Delete(ctx, &resourceObj); err != nil {
+						return err
+					}
+					r.Recorder.Eventf(&resourceObj, corev1.EventTypeNormal, "Deleted", "Deleted Resource %T", resourceObj)
+				}
+			}
+		case *appsv1.StatefulSet:
+			resourceObjList := &appsv1.StatefulSetList{}
+			if err := r.List(ctx, resourceObjList, listOps); err != nil {
+				return err
+			}
+			for _, resourceObj := range resourceObjList.Items {
+				if _, ok := deployStack.Spec.AppsList[resourceObj.Name]; !ok {
+					//statefulset no longer exists in the deploystack spec, so delete it
 					if err := r.Delete(ctx, &resourceObj); err != nil {
 						return err
 					}
@@ -326,8 +314,8 @@ func (r *DeployStackReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.DeployStack{}).
 		Owns(&appsv1.Deployment{}).
-		Owns(&appsv1.StatefulSet{}).
-		Owns(&corev1.Service{}).
+		// Owns(&appsv1.StatefulSet{}).
+		// Owns(&corev1.Service{}).
 		// Owns(&corev1.ConfigMap{}).
 		// Owns(&corev1.Secret{}).
 		// Owns(&v1.Ingress{}).

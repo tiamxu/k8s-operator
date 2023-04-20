@@ -12,14 +12,14 @@ import (
 // DeployStackSpec defines the desired state of DeployStack
 // +kubebuilder:pruning:PreserveUnknownFields
 type DeployStackSpec struct {
-	AppsList map[string]string              `json:"appsList,omitempty"`
+	AppsList map[string]string `json:"appsList,omitempty"`
+	// +optional
+	// +nullable
 	AppsConf map[string]map[string][]string `json:"appsConf,omitempty"`
-
-	Namespace string            `json:"namespace,omitempty"`
-	Default   []string          `json:"default,omitempty"`
-	Configs   map[string]string `json:"configs,omitempty"`
-	Secret    map[string]string `json:"secret,omitempty"`
-	Ingress   []IngressSpec     `json:"ingress,omitempty"`
+	Default  []string                       `json:"default,omitempty"`
+	Configs  map[string]string              `json:"configs,omitempty"`
+	Secret   map[string]string              `json:"secret,omitempty"`
+	Ingress  []IngressSpec                  `json:"ingress,omitempty"`
 }
 
 type IngressSpec struct {

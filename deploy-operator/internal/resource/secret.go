@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -35,12 +36,34 @@ func (builder *SecretBuild) GetObjectKind() (client.Object, error) {
 func (builder *SecretBuild) ExecStrategy() bool {
 	return false
 }
-func (builder *SecretBuild) Build(name, tag string) (client.Object, error) {
+func (builder *SecretBuild) Build(name, tag string, deployStack *unstructured.Unstructured, d DeployStackBuild) (client.Object, error) {
+	var (
+		namespace string
+	)
+	appsConfObj, _, err := GetAppConf(name, deployStack, d)
+	if err != nil {
+		return nil, err
+	}
+	appConf, ok := appsConfObj[name]
+	if !ok {
+		return nil, fmt.Errorf("Secret appConf error:%v", appConf)
+	}
+	for key, valueConf := range appConf {
+		switch key {
+		case "namespaceForDefault":
+			value, ok := valueConf.(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			namespace = value
+		default:
+		}
+	}
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        defaultSecretName,
-			Namespace:   builder.Instance.Spec.Namespace,
-			Labels:      Labels(name, builder.Instance.Spec.Namespace),
+			Namespace:   namespace,
+			Labels:      Labels(name, namespace),
 			Annotations: map[string]string{},
 		},
 		Data: builder.convertString(),

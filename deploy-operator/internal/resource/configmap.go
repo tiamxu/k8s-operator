@@ -2,8 +2,11 @@ package resource
 
 import (
 	// 	appsv1 "k8s.io/api/apps/v1"
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	// 	"sigs.k8s.io/controller-runtime/pkg/client"
 	// 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,27 +43,40 @@ func (builder *ConfigMapBuild) GetObjectKind() (client.Object, error) {
 	return &corev1.ConfigMap{}, nil
 }
 
-func (builder *ConfigMapBuild) Build(name, tag string) (client.Object, error) {
+func (builder *ConfigMapBuild) Build(name, tag string, deployStack *unstructured.Unstructured, d DeployStackBuild) (client.Object, error) {
+	var (
+		namespace string
+	)
+	appsConfObj, _, err := GetAppConf(name, deployStack, d)
+	if err != nil {
+		return nil, err
+	}
+	appConf, ok := appsConfObj[name]
+	if !ok {
+		return nil, fmt.Errorf("Service appConf error:%v", appConf)
+	}
+	for key, valueConf := range appConf {
+		switch key {
+		case "namespaceForDefault":
+			value, ok := valueConf.(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			namespace = value
+
+		default:
+		}
+	}
 	configMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        defaultConfigMapName,
-			Namespace:   builder.Instance.Spec.Namespace,
-			Labels:      Labels(name, builder.Instance.Spec.Namespace),
+			Namespace:   namespace,
+			Labels:      Labels(name, namespace),
 			Annotations: map[string]string{},
 		},
 		Data: builder.Instance.Spec.Configs,
 	}
 	return &configMap, nil
-}
-
-func (builder *ConfigMapBuild) Update(object client.Object, name, tag string) (client.Object, error) {
-	configMap := object.(*corev1.ConfigMap)
-	if configMap.Data == nil {
-		configMap.Data = make(map[string]string)
-	}
-	configMap.Data = builder.Instance.Spec.Configs
-
-	return configMap, nil
 }
 
 // func (builder *ConfigMapBuild) configData() (map[string]string, error) {

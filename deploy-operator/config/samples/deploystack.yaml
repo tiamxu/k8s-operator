@@ -12,15 +12,21 @@ spec:
 #全局配置项：default; 分类配置项:web、app、node; 服务配置:appsConf:
 #appsConf:default+类别+自定义
 #default配置项:xxForDefault命名; 自定义服务配置项: xxForName命名,
-#对于k8s列表配置项：name=key, value=value
-# 服务列表(前缀+"-"+服务名称:版本)
+#对应k8s列表配置项：name=key, value=value
+
+# 所有服务列表(前缀+"-"+服务名称:版本),支持上下线。
+#当不在appsConf中配置时,使用default配置
   appsList:
     hello: latest
     wxweb: latest
     broker: latest
 #服务配置，支持覆盖，[keyForName:value]
+#appsConf: 服务配置
+#  type: 服务类别
+#  - item: 自定义配置项
   appsConf:
     web:
+      appweb: []
       wxweb:
       - replicasForWxweb
       - probeReadyTcpForDefault:8800
@@ -32,11 +38,10 @@ spec:
       - volumeCmForDefault:/www/conf
       - volumeSecretForCerts
     sts:
-      broker:
-      - volumeSecretForCerts
+      broker: []
 
   #以下按服务类定义配置:web、go、node、java等
-  #前端类
+  #服务类别,和appsConf中的类别一致
   web:
   - portForHttp
   - replicasForWeb
@@ -45,9 +50,7 @@ spec:
   - portForGrpc
   - resourcesMemoryForDefault
   sts:
-  - portForHttp
-  - volumeSecretForCerts
-
+  - portForGrpc
   #..其他类
    #默认通用配置项
    #portFor 定义端口,格式:portFor+自定义名字
@@ -69,6 +72,7 @@ spec:
   - volumeCmForDefault
   - probeReadyTcpForDefault
 
+#
 
 #路由: Prefix、Exact、ImplementationSpecific
   ingress:

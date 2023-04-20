@@ -54,9 +54,8 @@ func (builder *StatefulSetBuild) Build(name, tag string, deployStack *unstructur
 	if !ok {
 		return nil, fmt.Errorf("appConf error:%v", appConf)
 	}
-	// fmt.Printf("####appsConf:%v\n", appsConfObj)
 	for key, valueConf := range appConf {
-		fmt.Printf("####key:%v,type:%T, value:%v\n", key, valueConf, valueConf)
+		// fmt.Printf("####key:%v,type:%T, value:%v\n", key, valueConf, valueConf)
 		switch key {
 		case "replicasForDefault", "replicasForWeb", "replicasForApp", fmt.Sprintf("replicasFor%s", strings.Title(name)):
 			if value, ok := valueConf.(int64); ok {
@@ -162,7 +161,6 @@ func (builder *StatefulSetBuild) Build(name, tag string, deployStack *unstructur
 		},
 	}
 
-	// fmt.Printf("replicas:%v,namespace:%v,ports:%v,resources:%v\n", *replicas, namespace, ports, resources)
 	//image
 	image = fmt.Sprintf("%s/%s_%s:%s", image, imageNamespace, name, tag)
 	if image == "" {
@@ -250,12 +248,44 @@ func (builder *StatefulSetBuild) Build(name, tag string, deployStack *unstructur
 			TimeoutSeconds:      5,
 		}
 	}
-
+	//PodTemplateSpec
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{},
+			Labels:      LabelsSelector(name, namespace),
+		},
+		Spec: corev1.PodSpec{
+			NodeSelector: map[string]string{},
+			Affinity:     &affinity,
+			Containers: []corev1.Container{{
+				Name:            name,
+				Image:           image,
+				ImagePullPolicy: imagePullPolicy,
+				// Command:         command,
+				// Args:            args,
+				Ports:          ports,
+				Resources:      resources,
+				Env:            env,
+				EnvFrom:        envFrom,
+				VolumeMounts:   volumeMounts,
+				LivenessProbe:  &livenessProbe,
+				ReadinessProbe: &readinessProbe,
+				Lifecycle:      &lifecycle,
+			}},
+			TerminationGracePeriodSeconds: int64Ptr(30),
+			Volumes:                       volumes,
+			ImagePullSecrets: []corev1.LocalObjectReference{{
+				Name: registrySecret,
+			}},
+		},
+	}
+	//sts
 	sts := appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    map[string]string{},
+			Name:        name,
+			Namespace:   namespace,
+			Annotations: map[string]string{},
+			Labels:      Labels(name, namespace),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: name,
@@ -267,35 +297,7 @@ func (builder *StatefulSetBuild) Build(name, tag string, deployStack *unstructur
 				},
 			},
 			Replicas: replicas,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{},
-					Labels:      LabelsSelector(name, namespace),
-				},
-				Spec: corev1.PodSpec{
-					Affinity: &affinity,
-					Containers: []corev1.Container{{
-						Name:            name,
-						Image:           image,
-						ImagePullPolicy: imagePullPolicy,
-						// Command:         command,
-						// Args:            args,
-						Ports:          ports,
-						Resources:      resources,
-						Env:            env,
-						EnvFrom:        envFrom,
-						VolumeMounts:   volumeMounts,
-						LivenessProbe:  &livenessProbe,
-						ReadinessProbe: &readinessProbe,
-						Lifecycle:      &lifecycle,
-					}},
-					TerminationGracePeriodSeconds: int64Ptr(30),
-					Volumes:                       volumes,
-					ImagePullSecrets: []corev1.LocalObjectReference{{
-						Name: registrySecret,
-					}},
-				},
-			},
+			Template: podTemplateSpec,
 		},
 	}
 

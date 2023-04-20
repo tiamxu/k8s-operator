@@ -42,6 +42,7 @@ spec:
                       type: string
                     type: array
                   type: object
+                nullable: true
                 type: object
               appsList:
                 additionalProperties:
@@ -82,8 +83,6 @@ spec:
                       type: object
                   type: object
                 type: array
-              namespace:
-                type: string
               secret:
                 additionalProperties:
                   type: string

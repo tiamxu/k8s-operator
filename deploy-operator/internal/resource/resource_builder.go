@@ -17,7 +17,6 @@ type DeployStackBuild struct {
 
 type ResourceBuilder interface {
 	Build(name, tag string, deployStack *unstructured.Unstructured, d DeployStackBuild) (client.Object, error)
-	// Update(object client.Object, name, tag string, deployStack *unstructured.Unstructured) (client.Object, error)
 	// ExecStrategy() bool
 	GetObjectKind() (client.Object, error)
 }
@@ -84,6 +83,7 @@ func GetAppConf(name string, deployStack *unstructured.Unstructured, builder Dep
 	if !ok {
 		return nil, "", fmt.Errorf("deployStack.Object is error")
 	}
+
 	defaultForConfig := builder.Instance.Spec.Default
 	if len(defaultForConfig) == 0 || defaultForConfig == nil {
 		return nil, "", fmt.Errorf("defaultForConfig error,not values or nil")
@@ -101,7 +101,7 @@ func GetAppConf(name string, deployStack *unstructured.Unstructured, builder Dep
 	}
 	for appType, appValue := range appsConf {
 		if appTypeConf, ok := appValue[name]; ok {
-			//自定义服务配置：type：web、app、sts
+			//服务类配置：type：web、app、sts
 			if keys, ok := deployStackSpec[appType]; ok {
 				for _, key := range keys.([]interface{}) {
 					// confValue = append(confValue, key.(string))
@@ -136,9 +136,13 @@ func GetAppConf(name string, deployStack *unstructured.Unstructured, builder Dep
 			}
 			appConf[name] = confMap
 			serverType = appType
-
+			return appConf, serverType, nil
 		}
-	}
 
+	}
+	//给个默认端口
+	confMap["portForGrpc"] = deployStackSpec["portForGrpc"]
+	appConf[name] = confMap
+	serverType = "serve"
 	return appConf, serverType, nil
 }

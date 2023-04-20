@@ -7,6 +7,7 @@ import (
 
 	v1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -36,14 +37,33 @@ func (builder *IngressBuild) GetObjectKind() (client.Object, error) {
 	return &v1.Ingress{}, nil
 
 }
-func (builder *IngressBuild) Build(name, tag string) (client.Object, error) {
+func (builder *IngressBuild) Build(name, tag string, deployStack *unstructured.Unstructured, d DeployStackBuild) (client.Object, error) {
 
 	var (
 		rules       []v1.IngressRule  = builder.ingressRules(name)
 		tls         []v1.IngressTLS   = builder.tlsStrategy(name)
 		annotations map[string]string = builder.getAnnotations(name)
+		namespace   string
 	)
-
+	appsConfObj, _, err := GetAppConf(name, deployStack, d)
+	if err != nil {
+		return nil, err
+	}
+	appConf, ok := appsConfObj[name]
+	if !ok {
+		return nil, fmt.Errorf("Ingress appConf error:%v", appConf)
+	}
+	for key, valueConf := range appConf {
+		switch key {
+		case "namespaceForDefault":
+			value, ok := valueConf.(string)
+			if !ok {
+				return nil, fmt.Errorf("%v Error", key)
+			}
+			namespace = value
+		default:
+		}
+	}
 	ingress := v1.Ingress{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Ingress",
@@ -51,7 +71,7 @@ func (builder *IngressBuild) Build(name, tag string) (client.Object, error) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        StringCombin(name, "-", "ingress"),
-			Namespace:   builder.Instance.Spec.Namespace,
+			Namespace:   namespace,
 			Annotations: annotations,
 		},
 		Spec: v1.IngressSpec{
