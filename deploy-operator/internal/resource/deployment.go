@@ -532,10 +532,16 @@ func volumeSourceForSuffix(key string) (string, string) {
 }
 func containerVolumes(name, configSuffix, volumeSource string) []corev1.Volume {
 	var volumes []corev1.Volume
+	var confName string
+	if configSuffix == "" {
+		confName = name
+	} else {
+		confName = fmt.Sprintf("%s-%s", name, configSuffix)
+	}
 	switch volumeSource {
 	case "ConfigMap":
 		volumes = append(volumes, corev1.Volume{
-			Name: fmt.Sprintf("%s-%s", name, configSuffix),
+			Name: confName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -547,7 +553,7 @@ func containerVolumes(name, configSuffix, volumeSource string) []corev1.Volume {
 	case "Secret":
 		volumes = append(volumes, corev1.Volume{
 
-			Name: fmt.Sprintf("%s-%s", name, configSuffix),
+			Name: confName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: fmt.Sprintf("%s-%s", name, configSuffix),
@@ -561,8 +567,14 @@ func containerVolumes(name, configSuffix, volumeSource string) []corev1.Volume {
 }
 func containerVolumeMounts(name, configSuffix, path string) []corev1.VolumeMount {
 	var volumeMounts []corev1.VolumeMount
+	var mountName string
+	if configSuffix == "" {
+		mountName = name
+	} else {
+		mountName = fmt.Sprintf("%s-%s", name, configSuffix)
+	}
 	volumeMounts = append(volumeMounts, []corev1.VolumeMount{
-		{Name: fmt.Sprintf("%s-%s", name, configSuffix), MountPath: path},
+		{Name: mountName, MountPath: path},
 	}...)
 
 	return volumeMounts

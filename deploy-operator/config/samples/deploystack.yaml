@@ -18,8 +18,6 @@ spec:
 #当不在appsConf中配置时,使用default配置
   appsList:
     hello: latest
-    wxweb: latest
-    broker: latest
 #服务配置，支持覆盖，[keyForName:value]
 #appsConf: 服务配置
 #  type: 服务类别
@@ -28,15 +26,11 @@ spec:
     web:
       appweb: []
       wxweb:
-      - replicasForWxweb
       - probeReadyTcpForDefault:8800
       - probeHttpEnable:false
     app:
       hello:
-      - portForHttp
-      - resourcesCpuForDefault
-      - volumeCmForDefault:/www/conf
-      - volumeSecretForCerts
+      - replicasForDefault:3
     sts:
       broker: []
 
@@ -48,7 +42,6 @@ spec:
   #后端类
   app:
   - portForGrpc
-  - resourcesMemoryForDefault
   sts:
   - portForGrpc
   #..其他类
@@ -107,10 +100,10 @@ spec:
   resourcesCpuForDefault: 10m-100m
 
   #port
-  portForGrpc: 5011
+  portForGrpc: 5010
   portForHttp: 8080
   #volume
-  volumeCmForDefault: /www/config
+  volumeCmForDefault: /www/config/
   volumeSecretForCerts: /etc/certs
 
   #probe
@@ -121,7 +114,7 @@ spec:
   #images
   imageRegistryForDefault: registry.cn-hangzhou.aliyuncs.com/unipal
   imageSecretsForDefault: regcred-vpc
-  imageNamespaceForDefault: prod
+  imageNamespaceForDefault: stage
 
   #replicas
   replicasForDefault: 1

@@ -138,7 +138,6 @@ func GetAppConf(name string, deployStack *unstructured.Unstructured, builder Dep
 			serverType = appType
 			return appConf, serverType, nil
 		}
-
 	}
 	//给个默认端口
 	confMap["portForGrpc"] = deployStackSpec["portForGrpc"]
